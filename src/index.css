@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+:root.light {
+  --app-bg: #f3f4f6;
+  --panel-bg: #ffffff;
+  --surface-bg: rgba(255, 255, 255, 0.8);
+  --surface-muted: rgba(255, 255, 255, 0.58);
+  --message-user: #eceef4;
+  --message-assistant: rgba(255, 255, 255, 0.84);
+  --text-primary: #18181b;
+  --text-secondary: #60606b;
+  --border: rgba(15, 23, 42, 0.09);
+  --focus: #0f172a;
+}
+
+:root.dark {
+  --app-bg: #09090b;
+  --panel-bg: #0f0f12;
+  --surface-bg: rgba(23, 23, 26, 0.84);
+  --surface-muted: rgba(23, 23, 26, 0.64);
+  --message-user: #232327;
+  --message-assistant: #151519;
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --border: rgba(255, 255, 255, 0.08);
+  --focus: #f4f4f5;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: var(--font-size-base, 14px);
+  background: var(--app-bg);
+  color: var(--text-primary);
+}
+
+textarea {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 130, 0.45);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

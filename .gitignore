@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+src-tauri/target/
+src-tauri/gen/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# IDE/editor
+.idea/
+.vscode/
+
+# OS/runtime artifacts
+*.swp
+*.swo
+*.tmp
+*.temp
+
+# Rust/Cargo
+**/*.rs.bk
+
+# Local app/runtime data (if added later)
+*.db
+*.sqlite
+*.sqlite3
