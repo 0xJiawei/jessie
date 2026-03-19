@@ -61,20 +61,28 @@ function App() {
             return;
           }
 
-          if (closeBehavior === "quit") {
-            return;
-          }
-
           event.preventDefault();
 
-          if (closeBehavior === "minimize") {
-            await appWindow.minimize();
-            return;
-          }
+          try {
+            if (closeBehavior === "quit") {
+              allowCloseRef.current = true;
+              await appWindow.close();
+              return;
+            }
 
-          setCloseAction("minimize");
-          setRememberCloseChoice(false);
-          setClosePromptOpen(true);
+            if (closeBehavior === "minimize") {
+              await appWindow.minimize();
+              return;
+            }
+
+            setCloseAction("minimize");
+            setRememberCloseChoice(false);
+            setClosePromptOpen(true);
+          } catch (error) {
+            allowCloseRef.current = false;
+            const message = error instanceof Error ? error.message : "Close action failed.";
+            pushToast(message, "error");
+          }
         });
       } catch {
         // Running outside Tauri window context.
@@ -87,7 +95,7 @@ function App() {
         unlisten();
       }
     };
-  }, [closeBehavior]);
+  }, [closeBehavior, pushToast]);
 
   const runCloseAction = async (action: "quit" | "minimize") => {
     const appWindow = appWindowRef.current;
@@ -108,7 +116,13 @@ function App() {
 
     allowCloseRef.current = true;
     setClosePromptOpen(false);
-    await appWindow.close();
+    try {
+      await appWindow.close();
+    } catch (error) {
+      allowCloseRef.current = false;
+      const message = error instanceof Error ? error.message : "Close action failed.";
+      pushToast(message, "error");
+    }
   };
 
   return (

@@ -205,6 +205,11 @@ export const useSettingsStore = create<SettingsState>()(
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<SettingsState>;
         const models = sanitizeModels(persisted.models);
+        const validModelIds = new Set(
+          models.map((model) => model.id.trim()).filter((id) => id.length > 0)
+        );
+        const persistedDefaultModelId =
+          typeof persisted.defaultModelId === "string" ? persisted.defaultModelId.trim() : "";
 
         return {
           ...currentState,
@@ -218,16 +223,20 @@ export const useSettingsStore = create<SettingsState>()(
               ? persisted.theme
               : currentState.theme,
           defaultModelId:
-            typeof persisted.defaultModelId === "string" ? persisted.defaultModelId : currentState.defaultModelId,
+            persistedDefaultModelId && validModelIds.has(persistedDefaultModelId)
+              ? persistedDefaultModelId
+              : "",
           modelTemperature:
             typeof persisted.modelTemperature === "number"
               ? clampTemperature(persisted.modelTemperature)
               : currentState.modelTemperature,
           modelMaxTokens:
             typeof persisted.modelMaxTokens === "number"
-              ? persisted.modelMaxTokens === 2048
-                ? null
-                : Math.max(256, Math.round(persisted.modelMaxTokens))
+              ? persisted.modelMaxTokens > 0
+                ? persisted.modelMaxTokens === 2048
+                  ? null
+                  : Math.max(256, Math.round(persisted.modelMaxTokens))
+                : null
               : null,
           fontSize:
             typeof persisted.fontSize === "number"
