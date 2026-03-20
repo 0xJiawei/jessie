@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import SettingCard from "./SettingCard";
 import SettingToggle from "./SettingToggle";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -5,11 +6,16 @@ import type { SectionFeedbackHandlers } from "./types";
 
 function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
   const language = useSettingsStore((state) => state.language);
+  const tavilyApiKey = useSettingsStore((state) => state.tavilyApiKey);
   const autoReasoning = useSettingsStore((state) => state.autoReasoning);
-  const autoWebSearch = useSettingsStore((state) => state.autoWebSearch);
   const setLanguage = useSettingsStore((state) => state.setLanguage);
+  const setTavilyApiKey = useSettingsStore((state) => state.setTavilyApiKey);
   const setAutoReasoning = useSettingsStore((state) => state.setAutoReasoning);
-  const setAutoWebSearch = useSettingsStore((state) => state.setAutoWebSearch);
+  const [tavilyDraft, setTavilyDraft] = useState(tavilyApiKey);
+
+  useEffect(() => {
+    setTavilyDraft(tavilyApiKey);
+  }, [tavilyApiKey]);
 
   return (
     <div className="space-y-4">
@@ -29,6 +35,23 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
         </select>
       </SettingCard>
 
+      <SettingCard title="Tavily API Key" description="Used for real-time web search tool calls.">
+        <input
+          type="password"
+          value={tavilyDraft}
+          onChange={(event) => setTavilyDraft(event.target.value)}
+          onBlur={() => {
+            if (tavilyDraft === tavilyApiKey) {
+              return;
+            }
+            setTavilyApiKey(tavilyDraft.trim());
+            onSaved();
+          }}
+          placeholder="tvly-..."
+          className="h-10 w-full rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-secondary)] focus:border-[color:var(--focus)]"
+        />
+      </SettingCard>
+
       <SettingCard title="Default Behaviors" description="Applied when starting new conversations.">
         <div className="space-y-2">
           <SettingToggle
@@ -37,15 +60,6 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
             checked={autoReasoning}
             onChange={(value) => {
               setAutoReasoning(value);
-              onSaved();
-            }}
-          />
-          <SettingToggle
-            label="Auto Web Search"
-            description="Enable web search mode by default"
-            checked={autoWebSearch}
-            onChange={(value) => {
-              setAutoWebSearch(value);
               onSaved();
             }}
           />

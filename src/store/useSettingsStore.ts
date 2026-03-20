@@ -35,6 +35,7 @@ const clampUiScale = (value: number) => Math.min(115, Math.max(85, value));
 
 interface SettingsState {
   apiKey: string;
+  tavilyApiKey: string;
   language: string;
   models: ModelConfig[];
   defaultModelId: string;
@@ -58,6 +59,7 @@ interface SettingsState {
   settingsTab: SettingsTab;
   isSettingsOpen: boolean;
   setApiKey: (value: string) => void;
+  setTavilyApiKey: (value: string) => void;
   setLanguage: (value: string) => void;
   setDefaultModelId: (value: string) => void;
   setModelTemperature: (value: number) => void;
@@ -104,6 +106,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       apiKey: "",
+      tavilyApiKey: "",
       language: "English",
       models: [],
       defaultModelId: "",
@@ -127,6 +130,7 @@ export const useSettingsStore = create<SettingsState>()(
       settingsTab: "general",
       isSettingsOpen: false,
       setApiKey: (value) => set({ apiKey: value }),
+      setTavilyApiKey: (value) => set({ tavilyApiKey: value }),
       setLanguage: (value) => set({ language: value }),
       setDefaultModelId: (value) => set({ defaultModelId: value }),
       setModelTemperature: (value) => set({ modelTemperature: clampTemperature(value) }),
@@ -180,6 +184,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: "jessie-settings",
       partialize: (state) => ({
         apiKey: state.apiKey,
+        tavilyApiKey: state.tavilyApiKey,
         language: state.language,
         models: state.models,
         defaultModelId: state.defaultModelId,
@@ -215,6 +220,8 @@ export const useSettingsStore = create<SettingsState>()(
           ...currentState,
           ...persisted,
           models,
+          tavilyApiKey:
+            typeof persisted.tavilyApiKey === "string" ? persisted.tavilyApiKey : currentState.tavilyApiKey,
           webSearchToolEnabled: true,
           fileUploadEnabled: true,
           imageInputEnabled: true,

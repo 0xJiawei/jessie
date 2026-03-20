@@ -1,5 +1,3 @@
-import type { MessageRole } from "../types/chat";
-
 export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const REQUEST_TIMEOUT_MS = 45000;
 
@@ -17,9 +15,14 @@ export interface ChatCompletionImagePart {
 
 export type ChatCompletionContent = string | Array<ChatCompletionTextPart | ChatCompletionImagePart>;
 
+export type ChatCompletionRequestRole = "system" | "user" | "assistant" | "tool";
+
 export interface ChatCompletionRequestMessage {
-  role: MessageRole;
+  role: ChatCompletionRequestRole;
   content: ChatCompletionContent;
+  tool_call_id?: string;
+  tool_calls?: OpenRouterToolCall[];
+  name?: string;
 }
 
 interface StreamChatCompletionOptions {

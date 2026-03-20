@@ -1,4 +1,4 @@
-import { Globe, Lightbulb, Paperclip, X } from "lucide-react";
+import { Lightbulb, Paperclip, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { modelSupportsImageInput } from "../lib/openrouter";
 import {
@@ -35,11 +35,9 @@ function InputBar() {
   const models = useSettingsStore((state) => state.models);
   const apiKey = useSettingsStore((state) => state.apiKey);
   const defaultModelId = useSettingsStore((state) => state.defaultModelId);
-  const webSearchEnabled = useSettingsStore((state) => state.webSearchEnabled);
   const reasoningEnabled = useSettingsStore((state) => state.reasoningEnabled);
   const fileUploadEnabled = useSettingsStore((state) => state.fileUploadEnabled);
   const imageInputEnabled = useSettingsStore((state) => state.imageInputEnabled);
-  const setWebSearchEnabled = useSettingsStore((state) => state.setWebSearchEnabled);
   const setReasoningEnabled = useSettingsStore((state) => state.setReasoningEnabled);
 
   const [value, setValue] = useState("");
@@ -80,7 +78,7 @@ function InputBar() {
     if (!apiKey.trim()) {
       return "Add API key in Settings";
     }
-    return "Enter to send, Shift+Enter for newline";
+    return "Enter to send, Shift+Enter for newline (Web search auto when needed)";
   }, [
     configuredModels.length,
     hasModelSelected,
@@ -208,7 +206,6 @@ function InputBar() {
     await sendMessage(content, {
       textFiles: currentTextFiles,
       imageFiles: currentImageFiles,
-      webSearchEnabled,
       reasoningEnabled,
     });
   };
@@ -307,19 +304,6 @@ function InputBar() {
                 <Paperclip size={14} />
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-              className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition ${
-                webSearchEnabled
-                  ? "border-[color:var(--focus)] bg-[var(--message-user)] text-[var(--text-primary)]"
-                  : "border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              <Globe size={13} />
-              Web
-            </button>
 
             <button
               type="button"

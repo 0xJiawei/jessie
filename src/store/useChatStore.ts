@@ -4,7 +4,6 @@ import {
   createChatCompletionText,
   createChatCompletionWithTools,
   modelLikelySupportsReasoning,
-  modelLikelySupportsToolCalling,
   modelSupportsImageInput,
   OpenRouterError,
   streamChatCompletion,
@@ -13,7 +12,7 @@ import {
   type OpenRouterToolDefinition,
 } from "../lib/openrouter";
 import { DEBUG } from "../lib/debug";
-import { formatWebSearchContext, searchWeb } from "../lib/webSearch";
+import { searchWebWithTavily } from "../lib/tavily";
 import type { ChatMessage, Conversation } from "../types/chat";
 import { useMemoryStore } from "./useMemoryStore";
 import { useSettingsStore } from "./useSettingsStore";
@@ -33,7 +32,6 @@ export interface UploadedImageFile {
 export interface SendMessageOptions {
   textFiles?: UploadedTextFile[];
   imageFiles?: UploadedImageFile[];
-  webSearchEnabled?: boolean;
   reasoningEnabled?: boolean;
 }
 
@@ -53,18 +51,20 @@ interface ChatState {
 
 const UNTITLED_NAME = "New Chat";
 const NO_RESPONSE_TEXT = "No response received from model. Please try again.";
+const REALTIME_QUERY_PATTERN =
+  /\b(today|tomorrow|now|current|latest|recent|news|weather|forecast|price|stock|live|update)\b|今天|明天|现在|最新|实时|天气|预报|新闻|股价|价格|汇率/i;
 
 const WEB_SEARCH_TOOL: OpenRouterToolDefinition = {
   type: "function",
   function: {
     name: "web_search",
-    description: "Search the web for up-to-date information when needed.",
+    description: "Search the web for real-time information",
     parameters: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description: "Search query keywords",
+          description: "Search query",
         },
       },
       required: ["query"],
@@ -388,77 +388,14 @@ export const useChatStore = create<ChatState>()(
         const reasoningEnabledForModel = Boolean(
           options?.reasoningEnabled && modelLikelySupportsReasoning(model)
         );
-        const webSearchRequested = Boolean(options?.webSearchEnabled);
-        const webSearchSupportedByModel = modelLikelySupportsToolCalling(model);
-        const canUseWebSearchTool = webSearchRequested && webSearchSupportedByModel;
-        const requestedTools = canUseWebSearchTool ? [WEB_SEARCH_TOOL.function.name] : [];
+        const shouldPreferWebSearch = REALTIME_QUERY_PATTERN.test(textUserPrompt || "");
+        const requestedTools = [WEB_SEARCH_TOOL.function.name];
+        const tavilyApiKey = settings.tavilyApiKey.trim();
 
         console.log({
           model,
           tools: requestedTools,
           reasoning_enabled: reasoningEnabledForModel,
-        });
-
-        let webSearchTriggered = false;
-        let webSearchQuery = "";
-        let webSearchResultCount = 0;
-        let webSearchFallbackReason = "";
-
-        if (webSearchRequested && !webSearchSupportedByModel) {
-          webSearchFallbackReason = "model_no_tool_support";
-        } else if (canUseWebSearchTool) {
-          try {
-            const toolProbe = await createChatCompletionWithTools({
-              apiKey: settings.apiKey,
-              model,
-              messages: [
-                ...systemMessages,
-                ...historyMessages,
-                {
-                  role: "user",
-                  content: textUserPrompt || content || userVisibleContent,
-                },
-              ],
-              tools: [WEB_SEARCH_TOOL],
-              toolChoice: "auto",
-              temperature: 0,
-              maxTokens: 160,
-              reasoningEnabled: reasoningEnabledForModel,
-            });
-
-            const matchedToolCall = toolProbe.toolCalls.find(
-              (toolCall) => toolCall.function?.name === WEB_SEARCH_TOOL.function.name
-            );
-
-            if (matchedToolCall) {
-              webSearchTriggered = true;
-              webSearchQuery =
-                parseWebSearchQuery(matchedToolCall) ||
-                (textUserPrompt || content || userVisibleContent).slice(0, 220);
-              const searchResults = await searchWeb(webSearchQuery);
-              webSearchResultCount = searchResults.length;
-
-              systemMessages.push({
-                role: "system",
-                content: "Web search mode is enabled. Use the following results when relevant.",
-              });
-              systemMessages.push({
-                role: "system",
-                content: `Here are relevant search results:\n\n${formatWebSearchContext(searchResults)}`,
-              });
-            }
-          } catch (error) {
-            webSearchFallbackReason = error instanceof Error ? error.message : "tool_probe_failed";
-          }
-        }
-
-        console.log("[Jessie][Tools][WebSearch]", {
-          requested: webSearchRequested,
-          supported: webSearchSupportedByModel,
-          triggered: webSearchTriggered,
-          query: webSearchQuery,
-          resultCount: webSearchResultCount,
-          fallback: webSearchFallbackReason || undefined,
         });
 
         const requestMessages: ChatCompletionRequestMessage[] = [
@@ -469,6 +406,106 @@ export const useChatStore = create<ChatState>()(
             content: currentUserContent,
           },
         ];
+
+        let finalRequestMessages = requestMessages;
+        let webSearchTriggered = false;
+        let webSearchFallbackReason = "";
+        try {
+          const maxToolRounds = 2;
+          let toolLoopMessages = requestMessages;
+          let toolUnavailableNotified = false;
+          let toolChoiceForRound: "auto" | "required" = shouldPreferWebSearch ? "required" : "auto";
+
+          for (let round = 0; round < maxToolRounds; round += 1) {
+            const toolProbe = await createChatCompletionWithTools({
+              apiKey: settings.apiKey,
+              model,
+              messages: toolLoopMessages,
+              tools: [WEB_SEARCH_TOOL],
+              toolChoice: toolChoiceForRound,
+              temperature: 0,
+              maxTokens: 220,
+              reasoningEnabled: reasoningEnabledForModel,
+            });
+
+            const matchedToolCalls = toolProbe.toolCalls.filter(
+              (toolCall) => toolCall.function?.name === WEB_SEARCH_TOOL.function.name
+            );
+            if (matchedToolCalls.length === 0) {
+              break;
+            }
+
+            webSearchTriggered = true;
+            if (!tavilyApiKey) {
+              webSearchFallbackReason = "missing_tavily_api_key";
+              if (!toolUnavailableNotified) {
+                useToastStore.getState().pushToast("Web search unavailable", "error");
+                toolUnavailableNotified = true;
+              }
+              break;
+            }
+
+            const toolResultMessages: ChatCompletionRequestMessage[] = [];
+            let toolExecutionFailed = false;
+
+            for (const toolCall of matchedToolCalls) {
+              const query = parseWebSearchQuery(toolCall);
+              if (!query) {
+                continue;
+              }
+
+              console.log("Tool called:", query);
+
+              try {
+                const tavilyResult = await searchWebWithTavily({
+                  apiKey: tavilyApiKey,
+                  query,
+                });
+                console.log("Tavily result:", tavilyResult);
+
+                toolResultMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id || createId(),
+                  name: WEB_SEARCH_TOOL.function.name,
+                  content: JSON.stringify(tavilyResult),
+                });
+              } catch (error) {
+                webSearchFallbackReason = error instanceof Error ? error.message : "tavily_request_failed";
+                if (!toolUnavailableNotified) {
+                  useToastStore.getState().pushToast("Web search unavailable", "error");
+                  toolUnavailableNotified = true;
+                }
+                toolExecutionFailed = true;
+                break;
+              }
+            }
+
+            if (toolExecutionFailed || toolResultMessages.length === 0) {
+              break;
+            }
+
+            const assistantToolMessage: ChatCompletionRequestMessage = {
+              role: "assistant",
+              content: toolProbe.text || "",
+              tool_calls: toolProbe.toolCalls,
+            };
+
+            toolLoopMessages = [...toolLoopMessages, assistantToolMessage, ...toolResultMessages];
+            finalRequestMessages = toolLoopMessages;
+            toolChoiceForRound = "auto";
+          }
+        } catch (error) {
+          webSearchFallbackReason = error instanceof Error ? error.message : "tool_probe_failed";
+          if (shouldPreferWebSearch) {
+            useToastStore.getState().pushToast("Web search unavailable", "error");
+          }
+        }
+
+        console.log("[Jessie][Tools][WebSearch]", {
+          preferred: shouldPreferWebSearch,
+          triggered: webSearchTriggered,
+          fallback: webSearchFallbackReason || undefined,
+        });
 
         if (DEBUG || settings.debugMode) {
           console.debug(
@@ -540,7 +577,7 @@ export const useChatStore = create<ChatState>()(
           await streamChatCompletion({
             apiKey: settings.apiKey,
             model,
-            messages: requestMessages,
+            messages: finalRequestMessages,
             temperature: settings.modelTemperature,
             maxTokens: settings.modelMaxTokens ?? undefined,
             reasoningEnabled: reasoningEnabledForModel,
