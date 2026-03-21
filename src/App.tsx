@@ -5,6 +5,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import Sidebar from "./components/Sidebar";
 import ToastViewport from "./components/ToastViewport";
 import { useChatStore } from "./store/useChatStore";
+import { useMcpStore } from "./store/useMcpStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useToastStore } from "./store/useToastStore";
 
@@ -13,8 +14,10 @@ function App() {
   const fontSize = useSettingsStore((state) => state.fontSize);
   const uiScale = useSettingsStore((state) => state.uiScale);
   const closeBehavior = useSettingsStore((state) => state.closeBehavior);
+  const mcpServers = useSettingsStore((state) => state.mcpServers);
   const setCloseBehavior = useSettingsStore((state) => state.setCloseBehavior);
   const createConversation = useChatStore((state) => state.createConversation);
+  const syncMcpWithSettings = useMcpStore((state) => state.syncWithSettings);
   const pushToast = useToastStore((state) => state.pushToast);
 
   const [closePromptOpen, setClosePromptOpen] = useState(false);
@@ -46,6 +49,10 @@ function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [createConversation]);
+
+  useEffect(() => {
+    void syncMcpWithSettings(mcpServers);
+  }, [mcpServers, syncMcpWithSettings]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;

@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import {
   createChatCompletionText,
   createChatCompletionWithTools,
+  modelLikelySupportsToolCalling,
   modelLikelySupportsReasoning,
   modelSupportsImageInput,
   OpenRouterError,
@@ -11,9 +12,18 @@ import {
   type OpenRouterToolCall,
   type OpenRouterToolDefinition,
 } from "../lib/openrouter";
+import {
+  createAppError,
+  isAppError,
+  mapOpenRouterError,
+  mapUnknownError,
+  type AppError,
+} from "../lib/appError";
 import { DEBUG } from "../lib/debug";
+import { safeSetLocalStorage } from "../lib/localPersistence";
 import { searchWebWithTavily } from "../lib/tavily";
 import type { ChatMessage, Conversation } from "../types/chat";
+import { useMcpStore } from "./useMcpStore";
 import { useMemoryStore } from "./useMemoryStore";
 import { useSettingsStore } from "./useSettingsStore";
 import { useToastStore } from "./useToastStore";
@@ -49,6 +59,8 @@ interface ChatState {
   sendMessage: (content: string, options?: SendMessageOptions) => Promise<void>;
 }
 
+type MemoryInjection = ReturnType<ReturnType<typeof useMemoryStore.getState>["buildMemoryInjection"]>;
+
 const UNTITLED_NAME = "New Chat";
 const NO_RESPONSE_TEXT = "No response received from model. Please try again.";
 const REALTIME_QUERY_PATTERN =
@@ -72,6 +84,12 @@ const WEB_SEARCH_TOOL: OpenRouterToolDefinition = {
     },
   },
 };
+
+interface UnifiedToolRuntime {
+  definition: OpenRouterToolDefinition;
+  source: "builtin" | "mcp";
+  execute: (args: unknown) => Promise<unknown>;
+}
 
 const getConfiguredModelIds = () =>
   useSettingsStore
@@ -138,16 +156,28 @@ const sanitizeGeneratedTitle = (title: string) => {
   return words.slice(0, 5).join(" ");
 };
 
-const parseWebSearchQuery = (toolCall?: OpenRouterToolCall) => {
-  if (!toolCall?.function?.arguments) {
-    return "";
+const parseToolArguments = (toolCall: OpenRouterToolCall) => {
+  if (!toolCall.function?.arguments) {
+    return {};
   }
 
   try {
-    const parsed = JSON.parse(toolCall.function.arguments) as { query?: unknown };
-    return typeof parsed.query === "string" ? parsed.query.trim() : "";
-  } catch {
-    return "";
+    const parsed = JSON.parse(toolCall.function.arguments) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Tool arguments must be a JSON object.");
+    }
+    return parsed;
+  } catch (error) {
+    throw createAppError({
+      code: "TOOL_CALL_PARSE_FAILED",
+      source: "tool",
+      message: error instanceof Error ? error.message : "Failed to parse tool arguments.",
+      retryable: true,
+      userMessage: "工具调用参数解析失败，请重试。",
+      debugContext: {
+        toolCall,
+      },
+    });
   }
 };
 
@@ -275,37 +305,90 @@ export const useChatStore = create<ChatState>()(
         }
 
         const settings = useSettingsStore.getState();
+        const setPreflightError = (appError: AppError) => {
+          console.error("[Jessie][Error][Preflight]", appError);
+          set({ error: appError.userMessage });
+        };
+
         if (!settings.apiKey) {
           settings.openSettings();
-          set({ error: "Please add your OpenRouter API key in Settings first." });
+          setPreflightError(
+            createAppError({
+              code: "MISSING_API_KEY",
+              source: "config",
+              message: "OpenRouter API key is missing.",
+              retryable: false,
+              userMessage: "请先在设置里填写 OpenRouter API Key。",
+            })
+          );
           return;
         }
 
         const model = get().selectedModel.trim() || getValidDefaultModelId();
         if (!model) {
-          set({ error: "Select a model before sending." });
+          setPreflightError(
+            createAppError({
+              code: "MISSING_MODEL",
+              source: "config",
+              message: "No model selected.",
+              retryable: false,
+              userMessage: "请先选择一个模型再发送消息。",
+            })
+          );
           return;
         }
 
         const configuredModelIds = getConfiguredModelIds();
         if (configuredModelIds.length === 0) {
           settings.openSettings();
-          set({ error: "No models configured. Add one in Settings first." });
+          setPreflightError(
+            createAppError({
+              code: "INVALID_MODEL",
+              source: "config",
+              message: "No models configured.",
+              retryable: false,
+              userMessage: "当前没有可用模型，请先在设置中添加模型。",
+            })
+          );
           return;
         }
 
         if (!configuredModelIds.includes(model)) {
-          set({ error: "The selected model is no longer available. Please choose another one." });
+          setPreflightError(
+            createAppError({
+              code: "INVALID_MODEL",
+              source: "config",
+              message: "Selected model is not configured.",
+              retryable: false,
+              userMessage: "当前选择的模型不可用，请重新选择模型。",
+            })
+          );
           return;
         }
 
         if (imageFiles.length > 0 && !settings.imageInputEnabled) {
-          set({ error: "Image input is disabled in settings." });
+          setPreflightError(
+            createAppError({
+              code: "IMAGE_INPUT_DISABLED",
+              source: "config",
+              message: "Image input is disabled.",
+              retryable: false,
+              userMessage: "图片输入已禁用，请在设置中启用后重试。",
+            })
+          );
           return;
         }
 
         if (imageFiles.length > 0 && !modelSupportsImageInput(model)) {
-          set({ error: "The selected model does not support image input." });
+          setPreflightError(
+            createAppError({
+              code: "MODEL_NO_IMAGE_SUPPORT",
+              source: "config",
+              message: "Selected model does not support image input.",
+              retryable: false,
+              userMessage: "当前模型不支持图片输入，请更换支持图片的模型。",
+            })
+          );
           return;
         }
 
@@ -319,6 +402,12 @@ export const useChatStore = create<ChatState>()(
         if (!conversation) {
           return;
         }
+
+        const requestStartedAt = Date.now();
+        console.log("[Jessie][Request][Start]", {
+          conversationId,
+          model,
+        });
 
         const textFileContext = buildTextFileContext(textFiles);
         const promptText = [content, textFileContext].filter((item) => item.length > 0).join("\n\n");
@@ -345,9 +434,24 @@ export const useChatStore = create<ChatState>()(
         };
 
         const memoryInput = promptText || content || userVisibleContent;
-        const memoryInjection = settings.memoryEnabled
-          ? useMemoryStore.getState().buildMemoryInjection(memoryInput)
-          : null;
+        let memoryInjection: MemoryInjection | null = null;
+        if (settings.memoryEnabled) {
+          try {
+            memoryInjection = useMemoryStore.getState().buildMemoryInjection(memoryInput);
+          } catch (error) {
+            const appError = mapUnknownError(error, {
+              code: "MEMORY_EXTRACTION_FAILED",
+              source: "memory",
+              retryable: true,
+              userMessage: "记忆读取失败，本次将继续但不使用记忆。",
+              debugContext: {
+                stage: "memory_injection",
+              },
+            });
+            console.error("[Jessie][Memory][Injection][Error]", appError);
+            memoryInjection = null;
+          }
+        }
 
         const systemMessages: ChatCompletionRequestMessage[] = [];
         if (memoryInjection && memoryInjection.systemPrompt.trim().length > 0) {
@@ -388,14 +492,68 @@ export const useChatStore = create<ChatState>()(
         const reasoningEnabledForModel = Boolean(
           options?.reasoningEnabled && modelLikelySupportsReasoning(model)
         );
+        const modelSupportsToolCalling = modelLikelySupportsToolCalling(model);
         const shouldPreferWebSearch = REALTIME_QUERY_PATTERN.test(textUserPrompt || "");
-        const requestedTools = [WEB_SEARCH_TOOL.function.name];
         const tavilyApiKey = settings.tavilyApiKey.trim();
+        const mcpStore = useMcpStore.getState();
+        const toolRegistry = new Map<string, UnifiedToolRuntime>();
+
+        if (tavilyApiKey) {
+          toolRegistry.set(WEB_SEARCH_TOOL.function.name, {
+            definition: WEB_SEARCH_TOOL,
+            source: "builtin",
+            execute: async (args) => {
+              const query =
+                args && typeof args === "object" && !Array.isArray(args) && "query" in args
+                  ? String((args as { query?: unknown }).query ?? "").trim()
+                  : "";
+
+              if (!query) {
+                throw createAppError({
+                  code: "TOOL_CALL_PARSE_FAILED",
+                  source: "tool",
+                  message: "Failed to parse web_search query from tool arguments.",
+                  retryable: true,
+                  userMessage: "Web search 请求解析失败，请重试。",
+                });
+              }
+
+              console.log("Tool called:", query);
+              const result = await searchWebWithTavily({
+                apiKey: tavilyApiKey,
+                query,
+              });
+              console.log("Tavily result:", result);
+              return result;
+            },
+          });
+        }
+
+        for (const mcpTool of mcpStore.getOpenRouterTools()) {
+          const toolName = mcpTool.function.name.trim();
+          if (!toolName || toolRegistry.has(toolName)) {
+            continue;
+          }
+
+          toolRegistry.set(toolName, {
+            definition: mcpTool,
+            source: "mcp",
+            execute: (args) =>
+              mcpStore.executeToolCall({
+                openRouterName: toolName,
+                arguments: args,
+                timeoutMs: 15_000,
+              }),
+          });
+        }
+
+        const requestedTools = Array.from(toolRegistry.keys());
 
         console.log({
           model,
           tools: requestedTools,
           reasoning_enabled: reasoningEnabledForModel,
+          tool_calling_supported: modelSupportsToolCalling,
         });
 
         const requestMessages: ChatCompletionRequestMessage[] = [
@@ -410,95 +568,165 @@ export const useChatStore = create<ChatState>()(
         let finalRequestMessages = requestMessages;
         let webSearchTriggered = false;
         let webSearchFallbackReason = "";
+        let preStreamError: AppError | null = null;
         try {
-          const maxToolRounds = 2;
-          let toolLoopMessages = requestMessages;
-          let toolUnavailableNotified = false;
-          let toolChoiceForRound: "auto" | "required" = shouldPreferWebSearch ? "required" : "auto";
+          if (requestedTools.length > 0 && modelSupportsToolCalling) {
+            const maxToolRounds = 3;
+            let toolLoopMessages = requestMessages;
+            let toolChoiceForRound: "auto" | "required" =
+              shouldPreferWebSearch && toolRegistry.has(WEB_SEARCH_TOOL.function.name)
+                ? "required"
+                : "auto";
 
-          for (let round = 0; round < maxToolRounds; round += 1) {
-            const toolProbe = await createChatCompletionWithTools({
-              apiKey: settings.apiKey,
-              model,
-              messages: toolLoopMessages,
-              tools: [WEB_SEARCH_TOOL],
-              toolChoice: toolChoiceForRound,
-              temperature: 0,
-              maxTokens: 220,
-              reasoningEnabled: reasoningEnabledForModel,
-            });
+            for (let round = 0; round < maxToolRounds; round += 1) {
+              const toolProbe = await createChatCompletionWithTools({
+                apiKey: settings.apiKey,
+                model,
+                messages: toolLoopMessages,
+                tools: Array.from(toolRegistry.values()).map((tool) => tool.definition),
+                toolChoice: toolChoiceForRound,
+                temperature: 0,
+                maxTokens: 260,
+                reasoningEnabled: reasoningEnabledForModel,
+              });
 
-            const matchedToolCalls = toolProbe.toolCalls.filter(
-              (toolCall) => toolCall.function?.name === WEB_SEARCH_TOOL.function.name
-            );
-            if (matchedToolCalls.length === 0) {
-              break;
-            }
-
-            webSearchTriggered = true;
-            if (!tavilyApiKey) {
-              webSearchFallbackReason = "missing_tavily_api_key";
-              if (!toolUnavailableNotified) {
-                useToastStore.getState().pushToast("Web search unavailable", "error");
-                toolUnavailableNotified = true;
-              }
-              break;
-            }
-
-            const toolResultMessages: ChatCompletionRequestMessage[] = [];
-            let toolExecutionFailed = false;
-
-            for (const toolCall of matchedToolCalls) {
-              const query = parseWebSearchQuery(toolCall);
-              if (!query) {
-                continue;
-              }
-
-              console.log("Tool called:", query);
-
-              try {
-                const tavilyResult = await searchWebWithTavily({
-                  apiKey: tavilyApiKey,
-                  query,
-                });
-                console.log("Tavily result:", tavilyResult);
-
-                toolResultMessages.push({
-                  role: "tool",
-                  tool_call_id: toolCall.id || createId(),
-                  name: WEB_SEARCH_TOOL.function.name,
-                  content: JSON.stringify(tavilyResult),
-                });
-              } catch (error) {
-                webSearchFallbackReason = error instanceof Error ? error.message : "tavily_request_failed";
-                if (!toolUnavailableNotified) {
-                  useToastStore.getState().pushToast("Web search unavailable", "error");
-                  toolUnavailableNotified = true;
-                }
-                toolExecutionFailed = true;
+              if (toolProbe.toolCalls.length === 0) {
                 break;
               }
+
+              const toolResultMessages: ChatCompletionRequestMessage[] = [];
+              for (const toolCall of toolProbe.toolCalls) {
+                const toolName = toolCall.function?.name?.trim() || "";
+                const matchedTool = toolRegistry.get(toolName);
+                if (!matchedTool) {
+                  preStreamError = createAppError({
+                    code: "MODEL_MALFORMED_RESPONSE",
+                    source: "tool",
+                    message: `Model requested unknown tool: ${toolName || "(empty)"}`,
+                    retryable: true,
+                    userMessage: "模型请求了未知工具，请重试或更换模型。",
+                    debugContext: {
+                      toolCall,
+                    },
+                  });
+                  break;
+                }
+
+                if (toolName === WEB_SEARCH_TOOL.function.name) {
+                  webSearchTriggered = true;
+                }
+
+                let parsedArgs: unknown = {};
+                try {
+                  parsedArgs = parseToolArguments(toolCall);
+                } catch (error) {
+                  preStreamError = isAppError(error)
+                    ? error
+                    : mapUnknownError(error, {
+                        code: "TOOL_CALL_PARSE_FAILED",
+                        source: "tool",
+                        retryable: true,
+                        userMessage: "工具调用参数解析失败，请重试。",
+                        debugContext: {
+                          toolName,
+                        },
+                      });
+                  break;
+                }
+
+                console.log("[Jessie][Tools][Called]", {
+                  tool: toolName,
+                  source: matchedTool.source,
+                });
+
+                try {
+                  const toolResult = await matchedTool.execute(parsedArgs);
+                  console.log("[Jessie][Tools][Result]", {
+                    tool: toolName,
+                    source: matchedTool.source,
+                  });
+                  toolResultMessages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id || createId(),
+                    name: toolName,
+                    content: JSON.stringify(toolResult ?? {}),
+                  });
+                } catch (error) {
+                  const userMessage =
+                    matchedTool.source === "builtin"
+                      ? "Web search unavailable：联网搜索失败，请稍后重试。"
+                      : "MCP 工具调用失败，请检查服务器状态后重试。";
+
+                  preStreamError = isAppError(error)
+                    ? error
+                    : mapUnknownError(error, {
+                        code: "TOOL_EXECUTION_FAILED",
+                        source: "tool",
+                        retryable: true,
+                        userMessage,
+                        debugContext: {
+                          tool: toolName,
+                          source: matchedTool.source,
+                        },
+                      });
+                  break;
+                }
+              }
+
+              if (preStreamError || toolResultMessages.length === 0) {
+                break;
+              }
+
+              const assistantToolMessage: ChatCompletionRequestMessage = {
+                role: "assistant",
+                content: toolProbe.text || "",
+                tool_calls: toolProbe.toolCalls,
+              };
+
+              toolLoopMessages = [...toolLoopMessages, assistantToolMessage, ...toolResultMessages];
+              finalRequestMessages = toolLoopMessages;
+              toolChoiceForRound = "auto";
             }
 
-            if (toolExecutionFailed || toolResultMessages.length === 0) {
-              break;
+            if (
+              shouldPreferWebSearch &&
+              toolRegistry.has(WEB_SEARCH_TOOL.function.name) &&
+              !webSearchTriggered &&
+              !preStreamError
+            ) {
+              preStreamError = createAppError({
+                code: "TOOL_EXECUTION_FAILED",
+                source: "tool",
+                message: "Model did not invoke web_search tool for a real-time query.",
+                retryable: true,
+                userMessage: "当前模型未触发联网搜索工具，请更换支持工具调用的模型后重试。",
+                debugContext: {
+                  model,
+                  prompt: textUserPrompt,
+                },
+              });
             }
-
-            const assistantToolMessage: ChatCompletionRequestMessage = {
-              role: "assistant",
-              content: toolProbe.text || "",
-              tool_calls: toolProbe.toolCalls,
-            };
-
-            toolLoopMessages = [...toolLoopMessages, assistantToolMessage, ...toolResultMessages];
-            finalRequestMessages = toolLoopMessages;
-            toolChoiceForRound = "auto";
+          } else if (shouldPreferWebSearch && !tavilyApiKey) {
+            webSearchFallbackReason = "missing_tavily_api_key";
+            useToastStore.getState().pushToast("Web search unavailable：请先在设置中填写 Tavily API Key。", "error");
+          } else if (shouldPreferWebSearch && !modelSupportsToolCalling) {
+            webSearchFallbackReason = "model_no_tool_support";
+            useToastStore.getState().pushToast("当前模型可能不支持工具调用，将直接使用模型回答。", "info");
           }
         } catch (error) {
-          webSearchFallbackReason = error instanceof Error ? error.message : "tool_probe_failed";
-          if (shouldPreferWebSearch) {
-            useToastStore.getState().pushToast("Web search unavailable", "error");
-          }
+          preStreamError =
+            isAppError(error)
+              ? error
+              : mapUnknownError(error, {
+                  code: "TOOL_EXECUTION_FAILED",
+                  source: "tool",
+                  retryable: true,
+                  userMessage: "Web search unavailable：工具调用失败，请重试。",
+                  debugContext: {
+                    model,
+                  },
+                });
+          webSearchFallbackReason = preStreamError.message || "tool_loop_failed";
         }
 
         console.log("[Jessie][Tools][WebSearch]", {
@@ -506,6 +734,48 @@ export const useChatStore = create<ChatState>()(
           triggered: webSearchTriggered,
           fallback: webSearchFallbackReason || undefined,
         });
+
+        if (preStreamError) {
+          console.error("[Jessie][Error][PreStream]", preStreamError);
+          useToastStore.getState().pushToast(preStreamError.userMessage, "error");
+
+          set((current) => ({
+            error: preStreamError.userMessage,
+            isStreaming: false,
+            conversations: current.conversations.map((item) => {
+              if (item.id !== conversationId) {
+                return item;
+              }
+
+              return {
+                ...item,
+                model,
+                updatedAt: Date.now(),
+                messages: [
+                  ...item.messages,
+                  userMessage,
+                  {
+                    ...assistantMessage,
+                    content: preStreamError.userMessage,
+                  },
+                ],
+              };
+            }),
+          }));
+
+          const persistenceError = safeSetLocalStorage(
+            "jessie:last_error",
+            JSON.stringify({
+              code: preStreamError.code,
+              source: preStreamError.source,
+              at: Date.now(),
+            })
+          );
+          if (persistenceError) {
+            console.error("[Jessie][Persistence][Error]", persistenceError);
+          }
+          return;
+        }
 
         if (DEBUG || settings.debugMode) {
           console.debug(
@@ -637,19 +907,45 @@ export const useChatStore = create<ChatState>()(
             model,
             hasContent: Boolean(latestAssistantMessage?.content.trim().length),
             length: latestAssistantMessage?.content.length ?? 0,
+            durationMs: Date.now() - requestStartedAt,
           });
+
+          const successPersistError = safeSetLocalStorage(
+            "jessie:last_success",
+            JSON.stringify({
+              model,
+              at: Date.now(),
+              conversationId,
+            })
+          );
+          if (successPersistError) {
+            console.error("[Jessie][Persistence][Error]", successPersistError);
+          }
 
           const latestConversation = get().conversations.find((item) => item.id === conversationId);
           if (latestConversation && settings.memoryEnabled) {
-            useMemoryStore
-              .getState()
-              .touchMemoryUsage(memoryInjection?.usedMemories.map((memory) => memory.id) ?? []);
+            try {
+              useMemoryStore
+                .getState()
+                .touchMemoryUsage(memoryInjection?.usedMemories.map((memory) => memory.id) ?? []);
 
-            void useMemoryStore.getState().extractMemory({
-              apiKey: settings.apiKey,
-              model,
-              conversationMessages: latestConversation.messages,
-            });
+              void useMemoryStore.getState().extractMemory({
+                apiKey: settings.apiKey,
+                model,
+                conversationMessages: latestConversation.messages,
+              });
+            } catch (error) {
+              const memoryError = mapUnknownError(error, {
+                code: "MEMORY_EXTRACTION_FAILED",
+                source: "memory",
+                retryable: true,
+                userMessage: "记忆提取失败，本次回复不受影响。",
+                debugContext: {
+                  stage: "post_response_memory",
+                },
+              });
+              console.error("[Jessie][Memory][PostResponse][Error]", memoryError);
+            }
 
             if (DEBUG || settings.debugMode) {
               const assistantResponse =
@@ -664,22 +960,28 @@ export const useChatStore = create<ChatState>()(
             }
           }
         } catch (error) {
-          const message =
+          const appError =
             error instanceof OpenRouterError
-              ? error.userMessage || error.message
-              : error instanceof Error
-                ? error.message
-                : "Unexpected request error.";
+              ? mapOpenRouterError(error, { model, conversationId })
+              : isAppError(error)
+                ? error
+                : mapUnknownError(error, {
+                    code: "UNKNOWN",
+                    source: "unknown",
+                    retryable: true,
+                    userMessage: "请求失败，请重试。",
+                    debugContext: {
+                      model,
+                      conversationId,
+                    },
+                  });
 
-          console.log("[Jessie][API][Error]", {
-            model,
-            message,
-          });
+          console.error("[Jessie][API][Error]", appError);
 
-          useToastStore.getState().pushToast(message, "error");
+          useToastStore.getState().pushToast(appError.userMessage, "error");
 
           set((current) => ({
-            error: message,
+            error: appError.userMessage,
             conversations: current.conversations.map((item) => {
               if (item.id !== conversationId) {
                 return item;
@@ -695,12 +997,24 @@ export const useChatStore = create<ChatState>()(
 
                   return {
                     ...entry,
-                    content: message,
+                    content: appError.userMessage,
                   };
                 }),
               };
             }),
           }));
+
+          const persistError = safeSetLocalStorage(
+            "jessie:last_error",
+            JSON.stringify({
+              code: appError.code,
+              source: appError.source,
+              at: Date.now(),
+            })
+          );
+          if (persistError) {
+            console.error("[Jessie][Persistence][Error]", persistError);
+          }
         } finally {
           set({ isStreaming: false });
         }

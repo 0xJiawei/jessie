@@ -2,6 +2,7 @@ import {
   Brain,
   Database,
   FlaskConical,
+  Plug,
   Palette,
   Settings,
   SlidersHorizontal,
@@ -16,6 +17,7 @@ interface SettingsSidebarProps {
 const tabs: Array<{ id: SettingsTab; label: string; icon: typeof Settings }> = [
   { id: "general", label: "General", icon: Settings },
   { id: "models", label: "Models", icon: SlidersHorizontal },
+  { id: "mcp", label: "MCP", icon: Plug },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "data", label: "Data", icon: Database },
   { id: "appearance", label: "Appearance", icon: Palette },

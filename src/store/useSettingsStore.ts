@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { McpServerConfig } from "../lib/mcpHost";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type CloseBehavior = "ask" | "quit" | "minimize";
@@ -7,6 +8,7 @@ export type CloseBehavior = "ask" | "quit" | "minimize";
 export type SettingsTab =
   | "general"
   | "models"
+  | "mcp"
   | "memory"
   | "data"
   | "appearance"
@@ -55,6 +57,7 @@ interface SettingsState {
   debugMode: boolean;
   experimentalFeatures: boolean;
   closeBehavior: CloseBehavior;
+  mcpServers: McpServerConfig[];
   sidebarWidth: number;
   settingsTab: SettingsTab;
   isSettingsOpen: boolean;
@@ -78,6 +81,9 @@ interface SettingsState {
   setDebugMode: (value: boolean) => void;
   setExperimentalFeatures: (value: boolean) => void;
   setCloseBehavior: (value: CloseBehavior) => void;
+  setMcpServers: (servers: McpServerConfig[]) => void;
+  upsertMcpServer: (server: McpServerConfig) => void;
+  removeMcpServer: (id: string) => void;
   setSidebarWidth: (value: number) => void;
   setSettingsTab: (tab: SettingsTab) => void;
   addModel: () => void;
@@ -88,7 +94,7 @@ interface SettingsState {
 }
 
 const validTab = (value: string): value is SettingsTab =>
-  ["general", "models", "memory", "data", "appearance", "advanced"].includes(value);
+  ["general", "models", "mcp", "memory", "data", "appearance", "advanced"].includes(value);
 
 const sanitizeModels = (value: unknown) => {
   if (!Array.isArray(value)) {
@@ -100,6 +106,68 @@ const sanitizeModels = (value: unknown) => {
     name:
       typeof (entry as { name?: unknown })?.name === "string" ? (entry as { name: string }).name : "",
   }));
+};
+
+const sanitizeStringList = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    : [];
+
+const sanitizeEnv = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {} as Record<string, string>;
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
+    (acc, [key, raw]) => {
+      if (typeof key !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        return acc;
+      }
+      if (typeof raw !== "string") {
+        return acc;
+      }
+      acc[key] = raw;
+      return acc;
+    },
+    {}
+  );
+};
+
+const sanitizeMcpServers = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return [] as McpServerConfig[];
+  }
+
+  return value.reduce<McpServerConfig[]>((acc, entry) => {
+      const raw = (entry ?? {}) as Partial<McpServerConfig>;
+      const id = typeof raw.id === "string" ? raw.id.trim() : "";
+      const name = typeof raw.name === "string" ? raw.name.trim() : "";
+
+      if (!id || !name) {
+        return acc;
+      }
+
+      acc.push({
+        id,
+        name,
+        enabled: Boolean(raw.enabled),
+        transport: "stdio" as const,
+        command: typeof raw.command === "string" ? raw.command.trim() : "",
+        args: sanitizeStringList(raw.args),
+        env: sanitizeEnv(raw.env),
+        cwd: typeof raw.cwd === "string" ? raw.cwd.trim() : undefined,
+        startupTimeoutMs:
+          typeof raw.startupTimeoutMs === "number" && Number.isFinite(raw.startupTimeoutMs)
+            ? Math.max(1000, Math.round(raw.startupTimeoutMs))
+            : undefined,
+        toolAllowlist: sanitizeStringList(raw.toolAllowlist),
+        toolDenylist: sanitizeStringList(raw.toolDenylist),
+      });
+      return acc;
+    }, []);
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -126,6 +194,7 @@ export const useSettingsStore = create<SettingsState>()(
       debugMode: false,
       experimentalFeatures: false,
       closeBehavior: "ask",
+      mcpServers: [],
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       settingsTab: "general",
       isSettingsOpen: false,
@@ -155,6 +224,31 @@ export const useSettingsStore = create<SettingsState>()(
       setDebugMode: (value) => set({ debugMode: value }),
       setExperimentalFeatures: (value) => set({ experimentalFeatures: value }),
       setCloseBehavior: (value) => set({ closeBehavior: value }),
+      setMcpServers: (servers) => set({ mcpServers: sanitizeMcpServers(servers) }),
+      upsertMcpServer: (server) =>
+        set((state) => {
+          const sanitized = sanitizeMcpServers([server])[0];
+          if (!sanitized) {
+            return state;
+          }
+
+          const existingIndex = state.mcpServers.findIndex((item) => item.id === sanitized.id);
+          if (existingIndex === -1) {
+            return {
+              mcpServers: [...state.mcpServers, sanitized],
+            };
+          }
+
+          return {
+            mcpServers: state.mcpServers.map((item, index) =>
+              index === existingIndex ? sanitized : item
+            ),
+          };
+        }),
+      removeMcpServer: (id) =>
+        set((state) => ({
+          mcpServers: state.mcpServers.filter((server) => server.id !== id),
+        })),
       setSidebarWidth: (value) => set({ sidebarWidth: clampSidebarWidth(value) }),
       setSettingsTab: (tab) => set({ settingsTab: tab }),
       addModel: () =>
@@ -204,6 +298,7 @@ export const useSettingsStore = create<SettingsState>()(
         debugMode: state.debugMode,
         experimentalFeatures: state.experimentalFeatures,
         closeBehavior: state.closeBehavior,
+        mcpServers: state.mcpServers,
         sidebarWidth: state.sidebarWidth,
         settingsTab: state.settingsTab,
       }),
@@ -255,6 +350,7 @@ export const useSettingsStore = create<SettingsState>()(
             typeof persisted.closeBehavior === "string" && ["ask", "quit", "minimize"].includes(persisted.closeBehavior)
               ? (persisted.closeBehavior as CloseBehavior)
               : currentState.closeBehavior,
+          mcpServers: sanitizeMcpServers(persisted.mcpServers),
           sidebarWidth: clampSidebarWidth(
             typeof persisted.sidebarWidth === "number"
               ? persisted.sidebarWidth

@@ -6,6 +6,7 @@ import AppearanceSection from "./settings/AppearanceSection";
 import DataSection from "./settings/DataSection";
 import GeneralSection from "./settings/GeneralSection";
 import MemorySection from "./settings/MemorySection";
+import McpSection from "./settings/McpSection";
 import ModelsSection from "./settings/ModelsSection";
 import SettingsSidebar from "./settings/SettingsSidebar";
 
@@ -61,6 +62,8 @@ function SettingsPanel() {
         return <GeneralSection {...sectionProps} />;
       case "models":
         return <ModelsSection {...sectionProps} />;
+      case "mcp":
+        return <McpSection {...sectionProps} />;
       case "memory":
         return <MemorySection {...sectionProps} />;
       case "data":

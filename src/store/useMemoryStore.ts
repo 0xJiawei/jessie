@@ -2,6 +2,12 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createChatCompletionText } from "../lib/openrouter";
 import {
+  categoryToMemoryType,
+  classifyMemoryCandidate,
+  isSupersedingMemory,
+  shouldPersistMemoryDecision,
+} from "../lib/memoryQuality";
+import {
   buildPrompt,
   formatMemory,
   retrieveRelevantMemory,
@@ -95,56 +101,6 @@ const determineMemoryType = (content: string): MemoryType => {
   }
 
   return "context";
-};
-
-const QUESTION_PATTERN =
-  /[?？]|\b(how|what|why|when|where|who|which|can you|could you|would you)\b|怎么|如何|为什么|什么|请问/i;
-const RESPONSE_LIKE_PATTERN =
-  /\b(as an ai|here('?s| is)|sure|certainly|let me|step by step|in summary|i can help)\b|当然|首先|其次|总结|步骤/i;
-const TEMPORARY_PATTERN =
-  /\b(today|tomorrow|this week|one-time|one time|for now|temporary|just now)\b|今天|明天|这周|这次|临时|一次性/i;
-const STABLE_PREFERENCE_PATTERN =
-  /\b(i prefer|i like|i usually|i always|i tend to|my preference)\b|我(偏好|更喜欢|通常|总是|习惯)/i;
-const STABLE_IDENTITY_PATTERN =
-  /\b(i am|i'm|my role|my job|i work as|i live in|i use)\b|我是|我在.*工作|我住在|我使用/i;
-const LONG_TERM_CONTEXT_PATTERN =
-  /\b(long-term|ongoing|always|regularly|habit|baseline|default)\b|长期|持续|一直|习惯/i;
-
-const shouldStoreMemory = (text: string) => {
-  const normalized = cleanMemoryContent(text);
-  if (!normalized) {
-    return false;
-  }
-
-  if (normalized.length > 200) {
-    return false;
-  }
-
-  if (QUESTION_PATTERN.test(normalized)) {
-    return false;
-  }
-
-  if (TEMPORARY_PATTERN.test(normalized)) {
-    return false;
-  }
-
-  if (RESPONSE_LIKE_PATTERN.test(normalized) && !STABLE_PREFERENCE_PATTERN.test(normalized)) {
-    return false;
-  }
-
-  if (STABLE_PREFERENCE_PATTERN.test(normalized)) {
-    return true;
-  }
-
-  if (STABLE_IDENTITY_PATTERN.test(normalized)) {
-    return true;
-  }
-
-  if (LONG_TERM_CONTEXT_PATTERN.test(normalized)) {
-    return true;
-  }
-
-  return false;
 };
 
 const similarityScore = (a: string, b: string) => {
@@ -394,13 +350,15 @@ export const useMemoryStore = create<MemoryState>()(
             if (similarIndex !== -1) {
               const existing = next[similarIndex];
               const contradicts = hasContradiction(existing.content, entry.content);
+              const supersedes = isSupersedingMemory(existing.content, entry.content);
+              const stronger = entry.content.length >= existing.content.length;
 
               next[similarIndex] = {
                 ...existing,
-                content: contradicts ? entry.content : existing.content,
-                type: contradicts ? entry.type : existing.type,
+                content: contradicts || supersedes || stronger ? entry.content : existing.content,
+                type: contradicts || supersedes ? entry.type : existing.type,
                 updatedAt: Date.now(),
-                source: contradicts ? entry.source : existing.source,
+                source: contradicts || supersedes ? entry.source : existing.source,
                 pinned: existing.pinned || entry.pinned,
                 weight: Math.min(20, Math.max(existing.weight ?? 1, entry.weight) + 0.6),
               };
@@ -553,20 +511,44 @@ export const useMemoryStore = create<MemoryState>()(
             )
             .filter((entry) => entry.content.length > 0);
 
-          const filtered = candidates.filter((entry) => shouldStoreMemory(entry.content));
+          const classified = candidates.map((entry) => {
+            const decision = classifyMemoryCandidate({ content: entry.content });
+            return {
+              entry,
+              decision,
+            };
+          });
+
+          const accepted = classified
+            .filter(({ decision }) => shouldPersistMemoryDecision(decision))
+            .map(({ entry, decision }) => ({
+              ...entry,
+              content: decision.summary,
+              type: categoryToMemoryType(decision.category),
+              source: "auto" as const,
+            }));
 
           console.log("[Jessie][Memory][Extract]", {
             candidateCount: candidates.length,
-            acceptedCount: filtered.length,
-            accepted: filtered.map((entry) => entry.content),
+            acceptedCount: accepted.length,
+            decisions: classified.map(({ entry, decision }) => ({
+              original: entry.content,
+              category: decision.category,
+              confidence: decision.confidence,
+              summary: decision.summary,
+              rationale: decision.rationale,
+            })),
           });
 
-          if (filtered.length === 0) {
+          if (accepted.length === 0) {
             return 0;
           }
 
-          return get().addMemoryItems(filtered);
-        } catch {
+          return get().addMemoryItems(accepted);
+        } catch (error) {
+          console.error("[Jessie][Memory][Extract][Error]", {
+            message: error instanceof Error ? error.message : "unknown",
+          });
           return 0;
         }
       },
