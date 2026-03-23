@@ -32,13 +32,13 @@ const ASSISTANT_STYLE_PATTERN =
 const GENERIC_FACT_PATTERN = /\b(earth|history|capital|physics|math|wikipedia)\b|百科|首都|历史|物理|数学/i;
 
 const PREFERENCE_PATTERN =
-  /\b(i prefer|i like|i usually|i want responses|prefer concise|prefer detailed)\b|我(偏好|更喜欢|习惯).*(回答|风格|格式)/i;
+  /\b(i prefer|i like|i usually|i want responses|prefer concise|prefer detailed|concise answers|detailed answers)\b|我(偏好|更喜欢|习惯).*(回答|风格|格式)|希望回答(简洁|详细)/i;
 const IDENTITY_PATTERN =
   /\b(i am|i'm|my role is|i work as|my background)\b|我是|我从事|我的职业|我的背景/i;
 const PROJECT_PATTERN =
   /\b(project|codebase|architecture|stack|local-first|tauri|react|typescript|openrouter|jessie)\b|项目|代码库|架构|技术栈|本地优先|tauri|react|typescript|openrouter|jessie/i;
 const STANDING_INSTRUCTION_PATTERN =
-  /\b(always|never|avoid|focus on|do not|must|should prioritize)\b|总是|不要|避免|重点|优先|必须/i;
+  /\b(always|never|avoid|focus on|do not|must|should prioritize|respond in|answer in|use chinese|use english)\b|总是|不要|避免|重点|优先|必须|请用中文|请用英文|请保持|请始终/i;
 
 const removeConversationalPrefix = (text: string) =>
   normalizeSpaces(

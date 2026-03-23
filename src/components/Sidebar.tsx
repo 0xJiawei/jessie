@@ -1,5 +1,6 @@
 import { Settings, SquarePen, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTr } from "../lib/i18n";
 import { useChatStore } from "../store/useChatStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useToastStore } from "../store/useToastStore";
@@ -7,8 +8,8 @@ import { useToastStore } from "../store/useToastStore";
 const SIDEBAR_MIN_WIDTH = 180;
 const SIDEBAR_MAX_WIDTH = 400;
 
-const formatTime = (timestamp: number) => {
-  return new Intl.DateTimeFormat("en", {
+const formatTime = (timestamp: number, locale: string) => {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -17,6 +18,7 @@ const formatTime = (timestamp: number) => {
 };
 
 function Sidebar() {
+  const { t, locale } = useTr();
   const conversations = useChatStore((state) => state.conversations);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const createConversation = useChatStore((state) => state.createConversation);
@@ -153,12 +155,14 @@ function Sidebar() {
                 }`}
               >
                 <p className="truncate text-sm font-medium text-[var(--text-primary)]">{conversation.title}</p>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">{formatTime(conversation.updatedAt)}</p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {formatTime(conversation.updatedAt, locale)}
+                </p>
               </button>
 
               <button
                 type="button"
-                aria-label="Delete chat"
+                aria-label={t("Delete chat", "删除对话")}
                 onClick={(event) => {
                   event.stopPropagation();
                   setPendingDeleteId(conversation.id);
@@ -175,7 +179,7 @@ function Sidebar() {
                   onClick={(event) => event.stopPropagation()}
                 >
                   <p className="text-xs leading-5 text-[var(--text-secondary)]">
-                    Are you sure you want to delete this chat?
+                    {t("Are you sure you want to delete this chat?", "确定要删除这个对话吗？")}
                   </p>
                   <div className="mt-2 flex justify-end gap-1.5">
                     <button
@@ -183,18 +187,18 @@ function Sidebar() {
                       onClick={() => setPendingDeleteId(null)}
                       className="h-7 rounded-md border border-[color:var(--border)] bg-[var(--surface-muted)] px-2.5 text-[11px] text-[var(--text-primary)] transition hover:bg-[var(--surface-bg)]"
                     >
-                      Cancel
+                      {t("Cancel", "取消")}
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         deleteConversation(conversation.id);
                         setPendingDeleteId(null);
-                        pushToast("Chat deleted", "success");
+                        pushToast(t("Chat deleted", "对话已删除"), "success");
                       }}
                       className="h-7 rounded-md border border-red-400/30 px-2.5 text-[11px] text-red-300 transition hover:bg-red-500/10"
                     >
-                      Delete
+                      {t("Delete", "删除")}
                     </button>
                   </div>
                 </div>
@@ -211,13 +215,13 @@ function Sidebar() {
           className="mb-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--border)] bg-[var(--surface-bg)] text-sm font-medium text-[var(--text-primary)] shadow-sm transition hover:-translate-y-px hover:bg-[var(--surface-muted)]"
         >
           <SquarePen size={15} />
-          New Chat
+          {t("New Chat", "新建对话")}
         </button>
 
         <button
           type="button"
           onClick={openSettings}
-          aria-label="Open settings"
+          aria-label={t("Open settings", "打开设置")}
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-bg)] hover:text-[var(--text-primary)]"
         >
           <Settings size={16} />
@@ -226,7 +230,7 @@ function Sidebar() {
 
       <button
         type="button"
-        aria-label="Resize sidebar"
+        aria-label={t("Resize sidebar", "调整侧边栏宽度")}
         onMouseDown={(event) => {
           event.preventDefault();
           setIsResizing(true);

@@ -22,7 +22,7 @@ import {
 import { DEBUG } from "../lib/debug";
 import { safeSetLocalStorage } from "../lib/localPersistence";
 import { searchWebWithTavily } from "../lib/tavily";
-import type { ChatMessage, Conversation } from "../types/chat";
+import type { ChatAppView, ChatMessage, Conversation } from "../types/chat";
 import { useMcpStore } from "./useMcpStore";
 import { useMemoryStore } from "./useMemoryStore";
 import { useSettingsStore } from "./useSettingsStore";
@@ -88,7 +88,7 @@ const WEB_SEARCH_TOOL: OpenRouterToolDefinition = {
 interface UnifiedToolRuntime {
   definition: OpenRouterToolDefinition;
   source: "builtin" | "mcp";
-  execute: (args: unknown) => Promise<unknown>;
+  execute: (args: unknown) => Promise<{ result: unknown; appView?: ChatAppView }>;
 }
 
 const getConfiguredModelIds = () =>
@@ -243,6 +243,8 @@ export const useChatStore = create<ChatState>()(
       createConversation: () => {
         const model = get().selectedModel.trim() || getValidDefaultModelId();
         const conversation = createConversationRecord(model);
+        const settingsState = useSettingsStore.getState();
+        settingsState.setReasoningEnabled(settingsState.autoReasoning);
 
         set((state) => ({
           conversations: [conversation, ...state.conversations],
@@ -437,7 +439,11 @@ export const useChatStore = create<ChatState>()(
         let memoryInjection: MemoryInjection | null = null;
         if (settings.memoryEnabled) {
           try {
-            memoryInjection = useMemoryStore.getState().buildMemoryInjection(memoryInput);
+            memoryInjection = await useMemoryStore.getState().buildMemoryInjectionWithCompression({
+              userInput: memoryInput,
+              apiKey: settings.apiKey,
+              model,
+            });
           } catch (error) {
             const appError = mapUnknownError(error, {
               code: "MEMORY_EXTRACTION_FAILED",
@@ -524,7 +530,7 @@ export const useChatStore = create<ChatState>()(
                 query,
               });
               console.log("Tavily result:", result);
-              return result;
+              return { result };
             },
           });
         }
@@ -568,6 +574,7 @@ export const useChatStore = create<ChatState>()(
         let finalRequestMessages = requestMessages;
         let webSearchTriggered = false;
         let webSearchFallbackReason = "";
+        let pendingAppView: ChatAppView | undefined;
         let preStreamError: AppError | null = null;
         try {
           if (requestedTools.length > 0 && modelSupportsToolCalling) {
@@ -640,16 +647,19 @@ export const useChatStore = create<ChatState>()(
                 });
 
                 try {
-                  const toolResult = await matchedTool.execute(parsedArgs);
+                  const toolExecution = await matchedTool.execute(parsedArgs);
                   console.log("[Jessie][Tools][Result]", {
                     tool: toolName,
                     source: matchedTool.source,
                   });
+                  if (toolExecution.appView && !pendingAppView) {
+                    pendingAppView = toolExecution.appView;
+                  }
                   toolResultMessages.push({
                     role: "tool",
                     tool_call_id: toolCall.id || createId(),
                     name: toolName,
-                    content: JSON.stringify(toolResult ?? {}),
+                    content: JSON.stringify(toolExecution.result ?? {}),
                   });
                 } catch (error) {
                   const userMessage =
@@ -808,7 +818,14 @@ export const useChatStore = create<ChatState>()(
               model,
               title: shouldGenerateTitleByLlm ? fallbackTitle : item.title,
               updatedAt: Date.now(),
-              messages: [...item.messages, userMessage, assistantMessage],
+              messages: [
+                ...item.messages,
+                userMessage,
+                {
+                  ...assistantMessage,
+                  appView: pendingAppView,
+                },
+              ],
             };
           }),
           error: null,

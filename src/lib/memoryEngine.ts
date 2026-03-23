@@ -12,7 +12,7 @@ const dedupeMemories = (memories: MemoryItem[]) => {
   const output: MemoryItem[] = [];
 
   for (const memory of memories) {
-    const key = normalize(memory.content);
+    const key = normalize(memory.compressedContent || memory.content);
     if (!key || seen.has(key)) {
       continue;
     }
@@ -55,7 +55,7 @@ export function retrieveRelevantMemory(input: string, memories: MemoryItem[]) {
     .map((memory) => {
       const pinnedScore = memory.pinned ? 100 : 0;
       const recencyScore = getRecencyScore(memory.updatedAt || memory.createdAt);
-      const keywordScore = getKeywordScore(inputTokens, memory.content);
+      const keywordScore = getKeywordScore(inputTokens, memory.compressedContent || memory.content);
       const weightScore = memory.weight ?? 0;
 
       return {
@@ -93,10 +93,12 @@ export function formatMemory(memories: MemoryItem[]) {
   let charBudget = 2600;
 
   for (const memory of memories) {
-    const line = `- ${typeLabel[memory.type]}: ${memory.content}`;
+    const prefix = `- ${typeLabel[memory.type]}: `;
+    const line = `${prefix}${memory.content}`;
     if (line.length > charBudget) {
-      break;
+      continue;
     }
+
     lines.push(line);
     charBudget -= line.length;
   }

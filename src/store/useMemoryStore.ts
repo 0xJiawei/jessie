@@ -28,6 +28,12 @@ interface ExtractMemoryOptions {
   conversationMessages: ChatMessage[];
 }
 
+interface BuildMemoryInjectionOptions {
+  userInput: string;
+  apiKey: string;
+  model: string;
+}
+
 interface ImportMemoryResult {
   added: number;
   error?: string;
@@ -63,6 +69,9 @@ interface MemoryState {
   importMemory: (rawInput: string, options?: ImportMemoryOptions) => Promise<ImportMemoryResult>;
   extractMemory: (options: ExtractMemoryOptions) => Promise<number>;
   buildMemoryInjection: (userInput: string) => MemoryInjectionResult;
+  buildMemoryInjectionWithCompression: (
+    options: BuildMemoryInjectionOptions
+  ) => Promise<MemoryInjectionResult>;
 }
 
 const createId = () => {
@@ -157,9 +166,23 @@ const parseMemoryArrayLike = (value: unknown) => {
         return item;
       }
 
-      if (item && typeof item === "object" && "content" in item) {
-        const content = (item as { content?: unknown }).content;
+      if (item && typeof item === "object") {
+        const content =
+          (item as { content?: unknown }).content ??
+          (item as { conversations_memory?: unknown }).conversations_memory ??
+          (item as { memory?: unknown }).memory ??
+          (item as { text?: unknown }).text;
         if (typeof content === "string") {
+          const rawCreatedAt =
+            (item as { timestamp?: unknown }).timestamp ??
+            (item as { createdAt?: unknown }).createdAt;
+          const parsedCreatedAt =
+            typeof rawCreatedAt === "number"
+              ? rawCreatedAt
+              : typeof rawCreatedAt === "string"
+                ? Number(rawCreatedAt)
+                : undefined;
+
           return {
             content,
             type:
@@ -172,8 +195,8 @@ const parseMemoryArrayLike = (value: unknown) => {
                 : "imported",
             pinned: Boolean((item as { pinned?: unknown }).pinned),
             createdAt:
-              typeof (item as { timestamp?: unknown }).timestamp === "number"
-                ? Number((item as { timestamp: number }).timestamp)
+              typeof parsedCreatedAt === "number" && Number.isFinite(parsedCreatedAt)
+                ? Number(parsedCreatedAt)
                 : undefined,
           };
         }
@@ -197,8 +220,31 @@ const parseMemoryArrayLike = (value: unknown) => {
     });
 };
 
+const parseMemoryObjectLike = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [] as NewMemoryInput[];
+  }
+
+  const objectValue = value as Record<string, unknown>;
+  const candidates = [
+    objectValue.items,
+    objectValue.memories,
+    objectValue.memoryItems,
+    objectValue.data,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseMemoryArrayLike(candidate);
+    if (parsed.length > 0) {
+      return parsed;
+    }
+  }
+
+  return [] as NewMemoryInput[];
+};
+
 const parseMemoryListFromText = (text: string) => {
-  const trimmed = text.trim();
+  const trimmed = text.replace(/^\uFEFF/, "").trim();
   if (!trimmed) {
     return [] as NewMemoryInput[];
   }
@@ -208,6 +254,11 @@ const parseMemoryListFromText = (text: string) => {
     const direct = parseMemoryArrayLike(parsed);
     if (direct.length > 0) {
       return direct;
+    }
+
+    const nested = parseMemoryObjectLike(parsed);
+    if (nested.length > 0) {
+      return nested;
     }
   } catch {
     // no-op
@@ -221,6 +272,11 @@ const parseMemoryListFromText = (text: string) => {
       const fromSlice = parseMemoryArrayLike(parsed);
       if (fromSlice.length > 0) {
         return fromSlice;
+      }
+
+      const nested = parseMemoryObjectLike(parsed);
+      if (nested.length > 0) {
+        return nested;
       }
     } catch {
       // no-op
@@ -242,11 +298,54 @@ const conversationSnippet = (messages: ChatMessage[]) =>
     .map((message) => `${message.role.toUpperCase()}: ${message.content.slice(0, 420)}`)
     .join("\n\n");
 
+const extractFallbackMemoryCandidates = (messages: ChatMessage[]) => {
+  const chunks = messages
+    .filter((message) => message.role === "user")
+    .slice(-12)
+    .flatMap((message) =>
+      message.content
+        .split(/\n+|(?<=[。！？.!?])\s+/)
+        .map(cleanMemoryContent)
+        .filter((line) => line.length > 0 && line.length <= 220)
+    );
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  for (const chunk of chunks) {
+    const key = normalize(chunk);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(chunk);
+  }
+
+  return unique.slice(-16);
+};
+
 const decayWeight = (weight: number | undefined, updatedAt: number) => {
   const base = weight ?? 0;
   const days = Math.max(0, (Date.now() - updatedAt) / (1000 * 60 * 60 * 24));
   return Math.max(0, base - Math.min(1.2, days * 0.03));
 };
+
+const COMPRESSION_THRESHOLD = 280;
+const MAX_COMPRESSION_PER_TURN = 2;
+const HAS_CJK_PATTERN = /[\u4e00-\u9fff]/;
+const INPUT_TRANSLATION_CACHE_LIMIT = 80;
+const inputTranslationCache = new Map<string, string>();
+
+const toPromptMemories = (memories: MemoryItem[]) =>
+  memories.map((memory) => ({
+    ...memory,
+    content: cleanMemoryContent(memory.compressedContent || memory.content),
+  }));
+
+const shouldCompressMemory = (memory: MemoryItem) =>
+  HAS_CJK_PATTERN.test(memory.content) ||
+  (memory.content.length > COMPRESSION_THRESHOLD &&
+    (!memory.compressedContent || memory.compressedContent.length > COMPRESSION_THRESHOLD));
 
 export const useMemoryStore = create<MemoryState>()(
   persist(
@@ -308,6 +407,7 @@ export const useMemoryStore = create<MemoryState>()(
               const content = cleanMemoryContent(entry);
               return {
                 content,
+                compressedContent: undefined,
                 type: determineMemoryType(content),
                 source: "manual" as const,
                 pinned: false,
@@ -321,6 +421,7 @@ export const useMemoryStore = create<MemoryState>()(
             const now = Date.now();
             return {
               content,
+              compressedContent: undefined,
               type: entry.type ?? determineMemoryType(content),
               source: entry.source ?? "manual",
               pinned: entry.pinned ?? false,
@@ -356,6 +457,8 @@ export const useMemoryStore = create<MemoryState>()(
               next[similarIndex] = {
                 ...existing,
                 content: contradicts || supersedes || stronger ? entry.content : existing.content,
+                compressedContent:
+                  contradicts || supersedes || stronger ? undefined : existing.compressedContent,
                 type: contradicts || supersedes ? entry.type : existing.type,
                 updatedAt: Date.now(),
                 source: contradicts || supersedes ? entry.source : existing.source,
@@ -380,6 +483,7 @@ export const useMemoryStore = create<MemoryState>()(
             next.push({
               id: createId(),
               content: entry.content,
+              compressedContent: entry.compressedContent,
               type: entry.type,
               createdAt: entry.createdAt,
               updatedAt: entry.updatedAt,
@@ -473,27 +577,8 @@ export const useMemoryStore = create<MemoryState>()(
           return 0;
         }
 
-        try {
-          const extractedText = await createChatCompletionText({
-            apiKey,
-            model,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Extract useful long-term memory from this conversation. Return JSON array of objects with fields: content, type (preference|fact|context). Include only durable preferences/facts/context. Skip one-off tasks and temporary requests. JSON only.",
-              },
-              {
-                role: "user",
-                content: conversationSnippet(conversationMessages),
-              },
-            ],
-            temperature: 0,
-            maxTokens: 320,
-          });
-
-          const parsed = parseMemoryListFromText(extractedText).slice(0, 8);
-          const candidates = parsed
+        const buildAcceptedFromRaw = (rawCandidates: NewMemoryInput[]) => {
+          const candidates = rawCandidates
             .map((entry) =>
               typeof entry === "string"
                 ? {
@@ -528,6 +613,43 @@ export const useMemoryStore = create<MemoryState>()(
               source: "auto" as const,
             }));
 
+          return {
+            accepted,
+            classified,
+            candidates,
+          };
+        };
+
+        try {
+          const extractedText = await createChatCompletionText({
+            apiKey,
+            model,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Extract useful long-term memory from this conversation. Return JSON array of objects with fields: content, type (preference|fact|context). Include only durable preferences/facts/context. Skip one-off tasks and temporary requests. Content must be in English. JSON only.",
+              },
+              {
+                role: "user",
+                content: conversationSnippet(conversationMessages),
+              },
+            ],
+            temperature: 0,
+            maxTokens: 320,
+          });
+
+          const parsed = parseMemoryListFromText(extractedText).slice(0, 8);
+          let { accepted, classified, candidates } = buildAcceptedFromRaw(parsed);
+
+          if (accepted.length === 0) {
+            const fallbackRaw = extractFallbackMemoryCandidates(conversationMessages);
+            const fallbackResult = buildAcceptedFromRaw(fallbackRaw);
+            accepted = fallbackResult.accepted;
+            classified = fallbackResult.classified;
+            candidates = fallbackResult.candidates;
+          }
+
           console.log("[Jessie][Memory][Extract]", {
             candidateCount: candidates.length,
             acceptedCount: accepted.length,
@@ -549,13 +671,34 @@ export const useMemoryStore = create<MemoryState>()(
           console.error("[Jessie][Memory][Extract][Error]", {
             message: error instanceof Error ? error.message : "unknown",
           });
-          return 0;
+
+          const fallbackRaw = extractFallbackMemoryCandidates(conversationMessages);
+          const fallbackAccepted = fallbackRaw
+            .map((content) => {
+              const decision = classifyMemoryCandidate({ content });
+              if (!shouldPersistMemoryDecision(decision)) {
+                return null;
+              }
+              return {
+                content: decision.summary,
+                type: categoryToMemoryType(decision.category),
+                source: "auto" as const,
+              };
+            })
+            .filter((entry): entry is { content: string; type: MemoryType; source: "auto" } => Boolean(entry));
+
+          if (fallbackAccepted.length === 0) {
+            return 0;
+          }
+
+          return get().addMemoryItems(fallbackAccepted);
         }
       },
 
       buildMemoryInjection: (userInput) => {
         const state = get();
         const relevant = retrieveRelevantMemory(userInput, state.items);
+        const relevantForPrompt = toPromptMemories(relevant);
 
         const profilePreference = state.profile.preferences.trim();
         const memoryForPrompt = profilePreference
@@ -570,9 +713,9 @@ export const useMemoryStore = create<MemoryState>()(
                 weight: 999,
                 source: "manual" as const,
               },
-              ...relevant,
+              ...relevantForPrompt,
             ]
-          : relevant;
+          : relevantForPrompt;
 
         const memoryBlock = formatMemory(memoryForPrompt);
         const prompt = buildPrompt(memoryBlock, userInput);
@@ -582,6 +725,110 @@ export const useMemoryStore = create<MemoryState>()(
           userPrompt: prompt.userPrompt,
           usedMemories: relevant,
         };
+      },
+
+      buildMemoryInjectionWithCompression: async ({ userInput, apiKey, model }) => {
+        let englishUserInput = userInput;
+        const trimmedInput = cleanMemoryContent(userInput);
+
+        if (HAS_CJK_PATTERN.test(trimmedInput)) {
+          const cached = inputTranslationCache.get(trimmedInput);
+          if (cached) {
+            englishUserInput = cached;
+          } else {
+            try {
+              const translated = await createChatCompletionText({
+                apiKey,
+                model,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "Translate the user text to natural English for downstream memory retrieval and model input. Preserve intent and key details. Output English only.",
+                  },
+                  {
+                    role: "user",
+                    content: trimmedInput,
+                  },
+                ],
+                temperature: 0,
+                maxTokens: 220,
+              });
+
+              const normalized = cleanMemoryContent(translated);
+              if (normalized.length > 0) {
+                englishUserInput = normalized;
+                inputTranslationCache.set(trimmedInput, normalized);
+                if (inputTranslationCache.size > INPUT_TRANSLATION_CACHE_LIMIT) {
+                  const firstKey = inputTranslationCache.keys().next().value;
+                  if (typeof firstKey === "string") {
+                    inputTranslationCache.delete(firstKey);
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn("[Jessie][Memory][InputTranslate][Skip]", {
+                message: error instanceof Error ? error.message : "unknown",
+              });
+            }
+          }
+        }
+
+        const state = get();
+        const relevant = retrieveRelevantMemory(englishUserInput, state.items);
+        const targets = relevant.filter(shouldCompressMemory).slice(0, MAX_COMPRESSION_PER_TURN);
+
+        if (targets.length > 0) {
+          const updates = new Map<string, string>();
+
+          for (const target of targets) {
+            try {
+              const compressed = await createChatCompletionText({
+                apiKey,
+                model,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "Rewrite this memory into concise durable English user context for system prompts. Keep key identity/preferences/project facts only. Maximum 220 English characters. Output English only. No markdown.",
+                  },
+                  {
+                    role: "user",
+                    content: target.content,
+                  },
+                ],
+                temperature: 0,
+                maxTokens: 120,
+              });
+
+              const normalized = cleanMemoryContent(compressed);
+              if (normalized.length > 0) {
+                updates.set(target.id, normalized);
+              }
+            } catch (error) {
+              console.warn("[Jessie][Memory][Compression][Skip]", {
+                id: target.id,
+                message: error instanceof Error ? error.message : "unknown",
+              });
+            }
+          }
+
+          if (updates.size > 0) {
+            set((current) => ({
+              items: current.items.map((item) =>
+                updates.has(item.id)
+                  ? {
+                      ...item,
+                      compressedContent: updates.get(item.id),
+                      updatedAt: Date.now(),
+                    }
+                  : item
+              ),
+            }));
+          }
+        }
+
+        return get().buildMemoryInjection(englishUserInput);
       },
     }),
     {
@@ -603,6 +850,10 @@ export const useMemoryStore = create<MemoryState>()(
           .map((item) => ({
             id: typeof item?.id === "string" ? item.id : createId(),
             content: typeof item?.content === "string" ? cleanMemoryContent(item.content) : "",
+            compressedContent:
+              typeof item?.compressedContent === "string"
+                ? cleanMemoryContent(item.compressedContent)
+                : undefined,
             type:
               typeof item?.type === "string" && ["preference", "fact", "context"].includes(item.type)
                 ? (item.type as MemoryType)

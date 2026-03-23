@@ -1,5 +1,6 @@
 import { ChevronDown, CircleHelp, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTr } from "../../lib/i18n";
 import ConfirmDialog from "../common/ConfirmDialog";
 import { useChatStore } from "../../store/useChatStore";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -8,6 +9,7 @@ import Tooltip from "./Tooltip";
 import type { SectionFeedbackHandlers } from "./types";
 
 function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
+  const { t } = useTr();
   const apiKey = useSettingsStore((state) => state.apiKey);
   const models = useSettingsStore((state) => state.models);
   const defaultModelId = useSettingsStore((state) => state.defaultModelId);
@@ -49,7 +51,13 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
 
   return (
     <div className="space-y-4">
-      <SettingCard title="OpenRouter API Key" description="Required for model requests. Stored locally on this device.">
+      <SettingCard
+        title={t("OpenRouter API Key", "OpenRouter API Key")}
+        description={t(
+          "Required for model requests. Stored locally on this device.",
+          "模型请求必填，仅保存在本地设备。"
+        )}
+      >
         <div className="relative">
           <input
             type={showApiKey ? "text" : "password"}
@@ -66,24 +74,32 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
             type="button"
             onClick={() => setShowApiKey((current) => !current)}
             className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--text-secondary)] transition hover:bg-[var(--surface-bg)] hover:text-[var(--text-primary)]"
-            aria-label={showApiKey ? "Hide API key" : "Show API key"}
+            aria-label={showApiKey ? t("Hide API key", "隐藏 API Key") : t("Show API key", "显示 API Key")}
           >
             {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
 
         {!apiKey.trim() && (
-          <p className="mt-2 text-xs text-amber-300">Add your OpenRouter API key to start chatting.</p>
+          <p className="mt-2 text-xs text-amber-300">
+            {t("Add your OpenRouter API key to start chatting.", "请先填写 OpenRouter API Key 以开始对话。")}
+          </p>
         )}
       </SettingCard>
 
-      <SettingCard title="Provider" description="Current model provider configuration.">
+      <SettingCard
+        title={t("Provider", "提供方")}
+        description={t("Current model provider configuration.", "当前模型提供方配置。")}
+      >
         <div className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)]">
           OpenRouter
         </div>
       </SettingCard>
 
-      <SettingCard title="Default Model" description="Used when opening a new chat.">
+      <SettingCard
+        title={t("Default Model", "默认模型")}
+        description={t("Used when opening a new chat.", "新建对话时默认使用。")}
+      >
         <select
           value={defaultModelId}
           onChange={(event) => {
@@ -95,7 +111,7 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
           }}
           className="h-9 w-full rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-primary)] outline-none focus:border-[color:var(--focus)]"
         >
-          <option value="">No default model</option>
+          <option value="">{t("No default model", "不设置默认模型")}</option>
           {configuredModels.map((model) => (
             <option key={model.id} value={model.id}>
               {model.name.trim() || model.id}
@@ -104,12 +120,18 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
         </select>
       </SettingCard>
 
-      <SettingCard title="Model Parameters" description="Optional defaults for every request.">
+      <SettingCard
+        title={t("Model Parameters", "模型参数")}
+        description={t("Optional defaults for every request.", "每次请求的可选默认参数。")}
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1.5">
             <span className="inline-flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-              Temperature
-              <Tooltip content="Controls randomness. Lower values = more deterministic. Higher values = more creative.">
+              {t("Temperature", "温度")}
+              <Tooltip content={t(
+                "Controls randomness. Lower values = more deterministic. Higher values = more creative.",
+                "控制随机性。值越低越稳定，值越高越发散。"
+              )}>
                 <CircleHelp size={13} className="text-[var(--text-secondary)]" />
               </Tooltip>
             </span>
@@ -129,8 +151,11 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
 
           <label className="space-y-1.5">
             <span className="inline-flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-              Max tokens
-              <Tooltip content="Maximum length of the model's response. Higher values allow longer outputs but cost more.">
+              {t("Max tokens", "最大 tokens")}
+              <Tooltip content={t(
+                "Maximum length of the model's response. Higher values allow longer outputs but cost more.",
+                "模型回复长度上限。越高可输出越长，但消耗也更高。"
+              )}>
                 <CircleHelp size={13} className="text-[var(--text-secondary)]" />
               </Tooltip>
             </span>
@@ -139,7 +164,7 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
               min={256}
               step={128}
               value={maxTokensInput}
-              placeholder="Unlimited"
+              placeholder={t("Unlimited", "不限制")}
               onChange={(event) => {
                 const nextValue = event.target.value;
                 setMaxTokensInput(nextValue);
@@ -181,30 +206,30 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
       </SettingCard>
 
       <SettingCard
-        title="Model List"
-        description="Manage model IDs and display names."
+        title={t("Model List", "模型列表")}
+        description={t("Manage model IDs and display names.", "管理模型 ID 与展示名称。")}
         action={
           <button
             type="button"
             onClick={() => {
               addModel();
               onSaved();
-              onMessage("Model added successfully", false);
+              onMessage(t("Model added successfully", "模型添加成功"), false);
             }}
             className="inline-flex h-8 items-center gap-1 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--surface-bg)]"
           >
             <Plus size={14} />
-            Add model
+            {t("Add model", "添加模型")}
           </button>
         }
       >
         {models.length === 0 ? (
-          <p className="text-xs text-[var(--text-secondary)]">No models configured yet.</p>
+          <p className="text-xs text-[var(--text-secondary)]">{t("No models configured yet.", "还没有配置模型。")}</p>
         ) : (
           <div className="space-y-2">
             {models.map((model, index) => {
               const isExpanded = expandedIndexes.includes(index);
-              const title = model.name.trim() || model.id.trim() || `Model ${index + 1}`;
+              const title = model.name.trim() || model.id.trim() || t("Model {n}", "模型 {n}", { n: index + 1 });
 
               return (
                 <div key={index} className="rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)]">
@@ -216,7 +241,7 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
                     <div>
                       <p className="text-sm text-[var(--text-primary)]">{title}</p>
                       <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                        {model.id.trim() || "ID not set"}
+                        {model.id.trim() || t("ID not set", "未设置 ID")}
                       </p>
                     </div>
                     <ChevronDown
@@ -235,7 +260,7 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
                           updateModel(index, { name: event.target.value });
                           onSaved();
                         }}
-                        placeholder="Display name"
+                        placeholder={t("Display name", "展示名称")}
                         className="h-9 w-full rounded-lg border border-[color:var(--border)] bg-[var(--surface-bg)] px-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[color:var(--focus)]"
                       />
 
@@ -254,7 +279,7 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
                           }
                           onSaved();
                         }}
-                        placeholder="Model ID"
+                        placeholder={t("Model ID", "模型 ID")}
                         className="h-9 w-full rounded-lg border border-[color:var(--border)] bg-[var(--surface-bg)] px-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[color:var(--focus)]"
                       />
 
@@ -264,7 +289,7 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
                         className="inline-flex h-8 items-center gap-1 rounded-lg border border-red-400/30 px-2.5 text-xs text-red-300 transition hover:bg-red-500/10"
                       >
                         <Trash2 size={13} />
-                        Delete
+                        {t("Delete", "删除")}
                       </button>
                     </div>
                   )}
@@ -277,8 +302,8 @@ function ModelsSection({ onSaved, onMessage }: SectionFeedbackHandlers) {
 
       <ConfirmDialog
         open={deleteModelIndex !== null}
-        title="Are you sure?"
-        description="This model configuration will be deleted."
+        title={t("Are you sure?", "确定吗？")}
+        description={t("This model configuration will be deleted.", "该模型配置将被删除。")}
         onCancel={() => setDeleteModelIndex(null)}
         onConfirm={() => {
           if (deleteModelIndex === null) {

@@ -1,8 +1,10 @@
+import { useTr } from "../../lib/i18n";
 import SettingCard from "./SettingCard";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import type { SectionFeedbackHandlers } from "./types";
 
 function AppearanceSection({ onSaved }: SectionFeedbackHandlers) {
+  const { t } = useTr();
   const theme = useSettingsStore((state) => state.theme);
   const fontSize = useSettingsStore((state) => state.fontSize);
   const uiScale = useSettingsStore((state) => state.uiScale);
@@ -13,7 +15,10 @@ function AppearanceSection({ onSaved }: SectionFeedbackHandlers) {
 
   return (
     <div className="space-y-4">
-      <SettingCard title="Theme" description="Choose light, dark, or system mode.">
+      <SettingCard
+        title={t("Theme", "主题")}
+        description={t("Choose light, dark, or system mode.", "选择浅色、深色或跟随系统。")}
+      >
         <div className="grid gap-2 sm:grid-cols-3">
           {(["light", "dark", "system"] as const).map((option) => (
             <button
@@ -29,13 +34,13 @@ function AppearanceSection({ onSaved }: SectionFeedbackHandlers) {
                   : "border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}
             >
-              {option[0].toUpperCase() + option.slice(1)}
+              {option === "light" ? t("Light", "浅色") : option === "dark" ? t("Dark", "深色") : t("System", "系统")}
             </button>
           ))}
         </div>
       </SettingCard>
 
-      <SettingCard title="Font Size" description="Adjust base text size.">
+      <SettingCard title={t("Font Size", "字体大小")} description={t("Adjust base text size.", "调整基础文字大小。")}>
         <div className="flex items-center gap-3">
           <input
             type="range"
@@ -52,7 +57,7 @@ function AppearanceSection({ onSaved }: SectionFeedbackHandlers) {
         </div>
       </SettingCard>
 
-      <SettingCard title="UI Scale" description="Scale the Jessie interface density.">
+      <SettingCard title={t("UI Scale", "界面缩放")} description={t("Scale the Jessie interface density.", "调整 Jessie 界面密度。")}>
         <div className="flex items-center gap-3">
           <input
             type="range"

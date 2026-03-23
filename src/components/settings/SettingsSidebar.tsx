@@ -7,6 +7,7 @@ import {
   Settings,
   SlidersHorizontal,
 } from "lucide-react";
+import { useTr } from "../../lib/i18n";
 import type { SettingsTab } from "../../store/useSettingsStore";
 
 interface SettingsSidebarProps {
@@ -25,10 +26,11 @@ const tabs: Array<{ id: SettingsTab; label: string; icon: typeof Settings }> = [
 ];
 
 function SettingsSidebar({ activeTab, onChange }: SettingsSidebarProps) {
+  const { t } = useTr();
   return (
     <nav className="w-[220px] shrink-0 border-r border-[color:var(--border)] bg-[var(--panel-bg)] p-3">
       <p className="mb-3 px-2 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-        Settings
+        {t("Settings", "设置")}
       </p>
 
       <div className="space-y-1">
@@ -48,7 +50,19 @@ function SettingsSidebar({ activeTab, onChange }: SettingsSidebarProps) {
               }`}
             >
               <Icon size={15} />
-              {tab.label}
+              {t(tab.label, tab.label === "General"
+                ? "通用"
+                : tab.label === "Models"
+                  ? "模型"
+                  : tab.label === "Memory"
+                    ? "记忆"
+                    : tab.label === "Data"
+                      ? "数据"
+                      : tab.label === "Appearance"
+                        ? "外观"
+                        : tab.label === "Advanced"
+                          ? "高级"
+                          : "MCP")}
             </button>
           );
         })}

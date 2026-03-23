@@ -58,6 +58,7 @@ interface SettingsState {
   experimentalFeatures: boolean;
   closeBehavior: CloseBehavior;
   mcpServers: McpServerConfig[];
+  mcpAllowedDomains: string[];
   sidebarWidth: number;
   settingsTab: SettingsTab;
   isSettingsOpen: boolean;
@@ -82,6 +83,7 @@ interface SettingsState {
   setExperimentalFeatures: (value: boolean) => void;
   setCloseBehavior: (value: CloseBehavior) => void;
   setMcpServers: (servers: McpServerConfig[]) => void;
+  setMcpAllowedDomains: (domains: string[]) => void;
   upsertMcpServer: (server: McpServerConfig) => void;
   removeMcpServer: (id: string) => void;
   setSidebarWidth: (value: number) => void;
@@ -136,6 +138,35 @@ const sanitizeEnv = (value: unknown) => {
   );
 };
 
+const sanitizeHeaders = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {} as Record<string, string>;
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
+    (acc, [key, raw]) => {
+      if (typeof key !== "string" || !/^[A-Za-z0-9-]+$/.test(key)) {
+        return acc;
+      }
+      if (typeof raw !== "string") {
+        return acc;
+      }
+      acc[key] = raw;
+      return acc;
+    },
+    {}
+  );
+};
+
+const sanitizeDomains = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.length > 0)
+        .map((item) => item.replace(/^https?:\/\//, "").replace(/\/+$/, ""))
+    : [];
+
 const sanitizeMcpServers = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [] as McpServerConfig[];
@@ -154,7 +185,7 @@ const sanitizeMcpServers = (value: unknown) => {
         id,
         name,
         enabled: Boolean(raw.enabled),
-        transport: "stdio" as const,
+        transport: raw.transport === "http" ? "http" : "stdio",
         command: typeof raw.command === "string" ? raw.command.trim() : "",
         args: sanitizeStringList(raw.args),
         env: sanitizeEnv(raw.env),
@@ -165,6 +196,12 @@ const sanitizeMcpServers = (value: unknown) => {
             : undefined,
         toolAllowlist: sanitizeStringList(raw.toolAllowlist),
         toolDenylist: sanitizeStringList(raw.toolDenylist),
+        endpointUrl: typeof raw.endpointUrl === "string" ? raw.endpointUrl.trim() : undefined,
+        headers: sanitizeHeaders(raw.headers),
+        enableLegacySseFallback:
+          typeof raw.enableLegacySseFallback === "boolean"
+            ? raw.enableLegacySseFallback
+            : true,
       });
       return acc;
     }, []);
@@ -195,6 +232,7 @@ export const useSettingsStore = create<SettingsState>()(
       experimentalFeatures: false,
       closeBehavior: "ask",
       mcpServers: [],
+      mcpAllowedDomains: [],
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       settingsTab: "general",
       isSettingsOpen: false,
@@ -225,6 +263,7 @@ export const useSettingsStore = create<SettingsState>()(
       setExperimentalFeatures: (value) => set({ experimentalFeatures: value }),
       setCloseBehavior: (value) => set({ closeBehavior: value }),
       setMcpServers: (servers) => set({ mcpServers: sanitizeMcpServers(servers) }),
+      setMcpAllowedDomains: (domains) => set({ mcpAllowedDomains: sanitizeDomains(domains) }),
       upsertMcpServer: (server) =>
         set((state) => {
           const sanitized = sanitizeMcpServers([server])[0];
@@ -299,6 +338,7 @@ export const useSettingsStore = create<SettingsState>()(
         experimentalFeatures: state.experimentalFeatures,
         closeBehavior: state.closeBehavior,
         mcpServers: state.mcpServers,
+        mcpAllowedDomains: state.mcpAllowedDomains,
         sidebarWidth: state.sidebarWidth,
         settingsTab: state.settingsTab,
       }),
@@ -351,6 +391,7 @@ export const useSettingsStore = create<SettingsState>()(
               ? (persisted.closeBehavior as CloseBehavior)
               : currentState.closeBehavior,
           mcpServers: sanitizeMcpServers(persisted.mcpServers),
+          mcpAllowedDomains: sanitizeDomains(persisted.mcpAllowedDomains),
           sidebarWidth: clampSidebarWidth(
             typeof persisted.sidebarWidth === "number"
               ? persisted.sidebarWidth

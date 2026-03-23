@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { OpenRouterToolDefinition } from "../lib/openrouter";
 import { createTauriMcpBridge } from "../lib/mcpClient";
 import type {
+  McpToolExecutionResult,
   McpNormalizedTool,
   McpServerConfig,
   McpServerRuntimeState,
@@ -12,13 +13,19 @@ interface McpState {
   serverStates: Record<string, McpServerRuntimeState>;
   tools: McpNormalizedTool[];
   isSyncing: boolean;
-  syncWithSettings: (configs: McpServerConfig[]) => Promise<void>;
-  connectServer: (config: McpServerConfig) => Promise<void>;
+  syncWithSettings: (configs: McpServerConfig[], allowedDomains: string[]) => Promise<void>;
+  connectServer: (config: McpServerConfig, allowedDomains?: string[]) => Promise<void>;
   disconnectServer: (serverId: string) => Promise<void>;
   refreshServerTools: (serverId: string) => Promise<void>;
   executeToolCall: (params: {
     openRouterName: string;
     arguments: unknown;
+    timeoutMs?: number;
+  }) => Promise<McpToolExecutionResult>;
+  requestFromServer: (params: {
+    serverId: string;
+    method: string;
+    params?: Record<string, unknown>;
     timeoutMs?: number;
   }) => Promise<unknown>;
   getOpenRouterTools: () => OpenRouterToolDefinition[];
@@ -45,18 +52,18 @@ export const useMcpStore = create<McpState>()((set) => ({
   tools: [],
   isSyncing: false,
 
-  syncWithSettings: async (configs) => {
+  syncWithSettings: async (configs, allowedDomains) => {
     set({ isSyncing: true });
     try {
-      await mcpHost.syncEnabledServers(configs);
+      await mcpHost.syncEnabledServers(configs, { allowedDomains });
     } finally {
       applyHostSnapshot(set);
       set({ isSyncing: false });
     }
   },
 
-  connectServer: async (config) => {
-    await mcpHost.connectServer(config);
+  connectServer: async (config, allowedDomains) => {
+    await mcpHost.connectServer(config, { allowedDomains });
     applyHostSnapshot(set);
   },
 
@@ -72,6 +79,16 @@ export const useMcpStore = create<McpState>()((set) => ({
 
   executeToolCall: async ({ openRouterName, arguments: args, timeoutMs }) =>
     mcpHost.callToolByOpenRouterName(openRouterName, args, timeoutMs),
+
+  requestFromServer: async ({ serverId, method, params, timeoutMs }) => {
+    const response = await mcpHost.requestServer({
+      serverId,
+      method,
+      params,
+      timeoutMs,
+    });
+    return response.result;
+  },
 
   getOpenRouterTools: () => mcpHost.getOpenRouterTools(),
 }));

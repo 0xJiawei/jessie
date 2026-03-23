@@ -1,5 +1,6 @@
 import { Lightbulb, Paperclip, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTr } from "../lib/i18n";
 import { modelSupportsImageInput } from "../lib/openrouter";
 import {
   useChatStore,
@@ -27,6 +28,7 @@ const toBase64DataUrl = (file: File) =>
   });
 
 function InputBar() {
+  const { t } = useTr();
   const sendMessage = useChatStore((state) => state.sendMessage);
   const selectedModel = useChatStore((state) => state.selectedModel);
   const setSelectedModel = useChatStore((state) => state.setSelectedModel);
@@ -64,22 +66,26 @@ function InputBar() {
 
   const statusHint = useMemo(() => {
     if (configuredModels.length === 0) {
-      return "No models configured";
+      return t("No models configured", "暂无可用模型");
     }
     if (!hasModelSelected) {
-      return "Select a model";
+      return t("Select a model", "请选择模型");
     }
     if (imageFiles.length > 0 && !imageSupport) {
-      return "Selected model may not support images";
+      return t("Selected model may not support images", "当前模型可能不支持图片输入");
     }
     if (!fileUploadEnabled && (textFiles.length > 0 || imageFiles.length > 0)) {
-      return "File upload is currently disabled";
+      return t("File upload is currently disabled", "当前文件上传功能已禁用");
     }
     if (!apiKey.trim()) {
-      return "Add API key in Settings";
+      return t("Add API key in Settings", "请先在设置中填写 API Key");
     }
-    return "Enter to send, Shift+Enter for newline (Web search auto when needed)";
+    return t(
+      "Enter to send, Shift+Enter for newline (Web search auto when needed)",
+      "回车发送，Shift+回车换行（需要时会自动联网搜索）"
+    );
   }, [
+    t,
     configuredModels.length,
     hasModelSelected,
     imageFiles.length,
@@ -142,7 +148,13 @@ function InputBar() {
 
       if (isTextFile) {
         if (file.size > MAX_TEXT_FILE_SIZE) {
-          warnings.push(`${file.name} exceeds text file size limit.`);
+          warnings.push(
+            t(
+              "{name} exceeds text file size limit.",
+              "{name} 超出文本文件大小限制。",
+              { name: file.name }
+            )
+          );
           continue;
         }
 
@@ -153,12 +165,16 @@ function InputBar() {
 
       if (isImageFile) {
         if (!imageInputEnabled) {
-          warnings.push("Image input is currently disabled.");
+          warnings.push(t("Image input is currently disabled.", "当前图片输入功能已禁用。"));
           continue;
         }
 
         if (file.size > MAX_IMAGE_FILE_SIZE) {
-          warnings.push(`${file.name} exceeds image size limit.`);
+          warnings.push(
+            t("{name} exceeds image size limit.", "{name} 超出图片大小限制。", {
+              name: file.name,
+            })
+          );
           continue;
         }
 
@@ -171,7 +187,11 @@ function InputBar() {
         continue;
       }
 
-      warnings.push(`${file.name} is not a supported file type.`);
+      warnings.push(
+        t("{name} is not a supported file type.", "{name} 不是支持的文件类型。", {
+          name: file.name,
+        })
+      );
     }
 
     if (nextTextFiles.length > 0) {
@@ -230,8 +250,11 @@ function InputBar() {
             rows={1}
             placeholder={
               apiKey
-                ? "Ask anything about your code..."
-                : "Add OpenRouter API key in Settings before sending."
+                ? t("Ask anything about your code...", "输入你的问题...")
+                : t(
+                    "Add OpenRouter API key in Settings before sending.",
+                    "发送前请先在设置中填写 OpenRouter API Key。"
+                  )
             }
             className="max-h-[220px] min-h-[32px] w-full resize-none border-none bg-transparent px-1 py-1 text-[15px] leading-6 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]"
           />
@@ -251,7 +274,7 @@ function InputBar() {
                         setTextFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
                       }}
                       className="text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-                      aria-label={`Remove ${file.name}`}
+                      aria-label={t("Remove {name}", "移除 {name}", { name: file.name })}
                     >
                       <X size={12} />
                     </button>
@@ -270,7 +293,7 @@ function InputBar() {
                         setImageFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
                       }}
                       className="text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-                      aria-label={`Remove ${file.name}`}
+                      aria-label={t("Remove {name}", "移除 {name}", { name: file.name })}
                     >
                       <X size={12} />
                     </button>
@@ -297,7 +320,7 @@ function InputBar() {
             {fileUploadEnabled && (
               <button
                 type="button"
-                aria-label="Upload files"
+                aria-label={t("Upload files", "上传文件")}
                 onClick={() => fileInputRef.current?.click()}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)] transition hover:bg-[var(--surface-bg)] hover:text-[var(--text-primary)]"
               >
@@ -315,7 +338,7 @@ function InputBar() {
               }`}
             >
               <Lightbulb size={13} />
-              Reasoning
+              {t("Reasoning", "推理")}
             </button>
 
             <ModelSelector value={selectedModel} onChange={setSelectedModel} className="ml-1 w-56 shrink-0" />
@@ -328,7 +351,7 @@ function InputBar() {
               disabled={!canSend}
               className="ml-auto h-8 rounded-lg border border-[color:var(--border)] bg-[var(--message-user)] px-3.5 text-sm font-medium text-[var(--text-primary)] shadow-sm transition hover:-translate-y-px hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
             >
-              {isStreaming ? "Streaming..." : "Send"}
+              {isStreaming ? t("Streaming...", "生成中...") : t("Send", "发送")}
             </button>
           </div>
 

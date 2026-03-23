@@ -4,17 +4,20 @@ import InputBar from "./components/InputBar";
 import SettingsPanel from "./components/SettingsPanel";
 import Sidebar from "./components/Sidebar";
 import ToastViewport from "./components/ToastViewport";
+import { useTr } from "./lib/i18n";
 import { useChatStore } from "./store/useChatStore";
 import { useMcpStore } from "./store/useMcpStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useToastStore } from "./store/useToastStore";
 
 function App() {
+  const { t } = useTr();
   const theme = useSettingsStore((state) => state.theme);
   const fontSize = useSettingsStore((state) => state.fontSize);
   const uiScale = useSettingsStore((state) => state.uiScale);
   const closeBehavior = useSettingsStore((state) => state.closeBehavior);
   const mcpServers = useSettingsStore((state) => state.mcpServers);
+  const mcpAllowedDomains = useSettingsStore((state) => state.mcpAllowedDomains);
   const setCloseBehavior = useSettingsStore((state) => state.setCloseBehavior);
   const createConversation = useChatStore((state) => state.createConversation);
   const syncMcpWithSettings = useMcpStore((state) => state.syncWithSettings);
@@ -51,8 +54,8 @@ function App() {
   }, [createConversation]);
 
   useEffect(() => {
-    void syncMcpWithSettings(mcpServers);
-  }, [mcpServers, syncMcpWithSettings]);
+    void syncMcpWithSettings(mcpServers, mcpAllowedDomains);
+  }, [mcpServers, mcpAllowedDomains, syncMcpWithSettings]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -112,7 +115,12 @@ function App() {
 
     if (rememberCloseChoice) {
       setCloseBehavior(action);
-      pushToast(`Will ${action === "quit" ? "quit" : "minimize"} on close`, "success");
+      pushToast(
+        action === "quit"
+          ? t("Will quit on close", "关闭时将退出应用")
+          : t("Will minimize on close", "关闭时将最小化应用"),
+        "success"
+      );
     }
 
     if (action === "minimize") {
@@ -153,9 +161,9 @@ function App() {
       {closePromptOpen && (
         <div className="fixed inset-0 z-[91] flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-xl border border-[color:var(--border)] bg-[var(--panel-bg)] p-4 shadow-panel">
-            <p className="text-sm font-medium text-[var(--text-primary)]">Close Jessie</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{t("Close Jessie", "关闭 Jessie")}</p>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Do you want to quit Jessie or minimize it to the dock?
+              {t("Do you want to quit Jessie or minimize it to the dock?", "你想退出 Jessie，还是最小化到 Dock？")}
             </p>
 
             <div className="mt-3 space-y-1.5">
@@ -165,11 +173,11 @@ function App() {
                   checked={closeAction === "minimize"}
                   onChange={() => setCloseAction("minimize")}
                 />
-                Minimize
+                {t("Minimize", "最小化")}
               </label>
               <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
                 <input type="radio" checked={closeAction === "quit"} onChange={() => setCloseAction("quit")} />
-                Quit
+                {t("Quit", "退出")}
               </label>
             </div>
 
@@ -179,7 +187,7 @@ function App() {
                 checked={rememberCloseChoice}
                 onChange={(event) => setRememberCloseChoice(event.target.checked)}
               />
-              Remember my choice
+              {t("Remember my choice", "记住我的选择")}
             </label>
 
             <div className="mt-4 flex justify-end gap-2">
@@ -188,7 +196,7 @@ function App() {
                 onClick={() => setClosePromptOpen(false)}
                 className="h-8 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-bg)]"
               >
-                Cancel
+                {t("Cancel", "取消")}
               </button>
               <button
                 type="button"
@@ -197,7 +205,7 @@ function App() {
                 }}
                 className="h-8 rounded-lg border border-[color:var(--border)] bg-[var(--message-user)] px-3 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-muted)]"
               >
-                {closeAction === "quit" ? "Quit" : "Minimize"}
+                {closeAction === "quit" ? t("Quit", "退出") : t("Minimize", "最小化")}
               </button>
             </div>
           </div>

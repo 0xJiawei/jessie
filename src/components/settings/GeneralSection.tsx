@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { useTr } from "../../lib/i18n";
+import { useSettingsStore } from "../../store/useSettingsStore";
 import SettingCard from "./SettingCard";
 import SettingToggle from "./SettingToggle";
-import { useSettingsStore } from "../../store/useSettingsStore";
 import type { SectionFeedbackHandlers } from "./types";
 
 function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
+  const { t } = useTr();
   const language = useSettingsStore((state) => state.language);
   const tavilyApiKey = useSettingsStore((state) => state.tavilyApiKey);
   const autoReasoning = useSettingsStore((state) => state.autoReasoning);
@@ -19,12 +21,13 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
 
   return (
     <div className="space-y-4">
-      <SettingCard title="Language" description="Language used in Jessie interface.">
+      <SettingCard
+        title={t("Language", "语言")}
+        description={t("Language used in Jessie interface.", "Jessie 界面的显示语言。")}
+      >
         <select
           value={language}
           onChange={(event) => {
-            // TODO: Language switch does not trigger UI re-render.
-            // Fix before v1 release (likely needs i18n state refresh or app reload)
             setLanguage(event.target.value);
             onSaved();
           }}
@@ -35,7 +38,10 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
         </select>
       </SettingCard>
 
-      <SettingCard title="Tavily API Key" description="Used for real-time web search tool calls.">
+      <SettingCard
+        title={t("Tavily API Key", "Tavily API Key")}
+        description={t("Used for real-time web search tool calls.", "用于联网搜索工具调用。")}
+      >
         <input
           type="password"
           value={tavilyDraft}
@@ -52,11 +58,17 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
         />
       </SettingCard>
 
-      <SettingCard title="Default Behaviors" description="Applied when starting new conversations.">
+      <SettingCard
+        title={t("Default Behaviors", "默认行为")}
+        description={t("Applied when starting new conversations.", "新对话默认应用。")}
+      >
         <div className="space-y-2">
           <SettingToggle
-            label="Auto Reasoning"
-            description="Enable reasoning mode by default"
+            label={t("Auto Reasoning", "默认启用推理")}
+            description={t(
+              "Enable OpenRouter reasoning.enabled by default (supported models only)",
+              "默认开启 OpenRouter reasoning.enabled（仅对支持模型生效）"
+            )}
             checked={autoReasoning}
             onChange={(value) => {
               setAutoReasoning(value);
@@ -66,9 +78,15 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
         </div>
       </SettingCard>
 
-      <SettingCard title="Keyboard Shortcuts" description="Customizable shortcuts coming soon.">
+      <SettingCard
+        title={t("Keyboard Shortcuts", "快捷键")}
+        description={t("Customizable shortcuts coming soon.", "可自定义快捷键即将上线。")}
+      >
         <div className="rounded-lg border border-dashed border-[color:var(--border)] px-3 py-2 text-xs text-[var(--text-secondary)]">
-          Placeholder: `Cmd+K` quick switch, `Cmd+,` open settings.
+          {t(
+            "Placeholder: `Cmd+K` quick switch, `Cmd+,` open settings.",
+            "占位：`Cmd+K` 快速切换，`Cmd+,` 打开设置。"
+          )}
         </div>
       </SettingCard>
     </div>
@@ -76,3 +94,4 @@ function GeneralSection({ onSaved }: SectionFeedbackHandlers) {
 }
 
 export default GeneralSection;
+

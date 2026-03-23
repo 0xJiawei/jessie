@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTr } from "../lib/i18n";
 import { useSettingsStore } from "../store/useSettingsStore";
 
 interface ModelSelectorProps {
@@ -9,6 +10,7 @@ interface ModelSelectorProps {
 }
 
 function ModelSelector({ value, onChange, className = "", disabled = false }: ModelSelectorProps) {
+  const { t } = useTr();
   const models = useSettingsStore((state) => state.models);
 
   const configuredModels = useMemo(
@@ -28,7 +30,7 @@ function ModelSelector({ value, onChange, className = "", disabled = false }: Mo
         className="h-8 w-full appearance-none rounded-lg border border-[color:var(--border)] bg-[var(--surface-bg)] px-3 pr-8 text-sm text-[var(--text-primary)] outline-none transition hover:border-[color:var(--text-secondary)] focus:border-[color:var(--focus)] disabled:cursor-not-allowed disabled:opacity-60"
       >
         <option value="" disabled>
-          {hasModels ? "Select model" : "No models configured"}
+          {hasModels ? t("Select model", "选择模型") : t("No models configured", "暂无可用模型")}
         </option>
         {configuredModels.map((model) => (
           <option key={model.id} value={model.id}>

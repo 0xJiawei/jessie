@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { useTr } from "../lib/i18n";
 import { useSettingsStore, type SettingsTab } from "../store/useSettingsStore";
 import { useToastStore } from "../store/useToastStore";
 import AdvancedSection from "./settings/AdvancedSection";
@@ -11,6 +12,7 @@ import ModelsSection from "./settings/ModelsSection";
 import SettingsSidebar from "./settings/SettingsSidebar";
 
 function SettingsPanel() {
+  const { t } = useTr();
   const isSettingsOpen = useSettingsStore((state) => state.isSettingsOpen);
   const activeTab = useSettingsStore((state) => state.settingsTab);
   const setActiveTab = useSettingsStore((state) => state.setSettingsTab);
@@ -44,7 +46,7 @@ function SettingsPanel() {
   );
 
   const showSavedToast = () => {
-    pushToast("Saved successfully", "success");
+    pushToast(t("Saved successfully", "保存成功"), "success");
   };
 
   const showMessage = (message: string, isError = false) => {
@@ -85,7 +87,7 @@ function SettingsPanel() {
     >
       <button
         type="button"
-        aria-label="Close settings"
+        aria-label={t("Close settings", "关闭设置")}
         onClick={closeSettings}
         className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
           isSettingsOpen ? "pointer-events-auto opacity-100" : "opacity-0"
@@ -98,13 +100,15 @@ function SettingsPanel() {
 
           <div className="relative min-w-0 flex-1">
             <div className="flex h-14 items-center justify-between border-b border-[color:var(--border)] px-5">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">Jessie Settings</p>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                {t("Jessie Settings", "Jessie 设置")}
+              </p>
               <button
                 type="button"
                 onClick={closeSettings}
                 className="rounded-md px-2 py-1 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
               >
-                Close
+                {t("Close", "关闭")}
               </button>
             </div>
 

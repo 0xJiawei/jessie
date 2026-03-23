@@ -7,6 +7,7 @@ export type MemoryType = "preference" | "fact" | "context";
 export interface MemoryItem {
   id: string;
   content: string;
+  compressedContent?: string;
   type: MemoryType;
   createdAt: number;
   updatedAt: number;

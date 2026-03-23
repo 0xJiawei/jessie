@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { McpBridge, McpServerConfig } from "./mcpHost";
-import { McpHost, validateMcpServerConfig } from "./mcpHost";
+import { McpHost, isEndpointAllowedByDomains, validateMcpServerConfig } from "./mcpHost";
 
 const createServerConfig = (patch?: Partial<McpServerConfig>): McpServerConfig => ({
   id: "server-1",
@@ -27,6 +27,8 @@ const createBridge = (overrides?: Partial<McpBridge>): McpBridge => ({
     warning: null,
   })),
   callTool: vi.fn(async () => ({ result: { ok: true } })),
+  readResource: vi.fn(async () => ({ result: { contents: [] } })),
+  request: vi.fn(async () => ({ result: {} })),
   ...overrides,
 });
 
@@ -53,6 +55,35 @@ describe("mcp config validation", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.errors.args || result.errors.env).toBeTruthy();
+  });
+});
+
+describe("mcp remote security", () => {
+  it("allows only HTTPS endpoints that match allowed domains", () => {
+    expect(
+      isEndpointAllowedByDomains("https://example.com/mcp", ["example.com", "*.trusted.dev"])
+    ).toBe(true);
+    expect(
+      isEndpointAllowedByDomains("https://tools.trusted.dev/connect", ["example.com", "*.trusted.dev"])
+    ).toBe(true);
+    expect(isEndpointAllowedByDomains("http://api.example.com/mcp", ["example.com"])).toBe(false);
+    expect(isEndpointAllowedByDomains("https://evil.com/mcp", ["example.com"])).toBe(false);
+  });
+
+  it("rejects http transport when endpoint is not in allowlist", async () => {
+    const bridge = createBridge();
+    const host = new McpHost(bridge);
+    const httpConfig = createServerConfig({
+      id: "remote-1",
+      name: "Remote MCP",
+      transport: "http",
+      command: "",
+      endpointUrl: "https://remote.example.com/mcp",
+    });
+
+    await expect(host.connectServer(httpConfig, { allowedDomains: ["allowed.example.com"] })).rejects.toThrow(
+      "Remote MCP endpoint must use HTTPS and match allowed domains."
+    );
   });
 });
 
@@ -244,7 +275,7 @@ describe("mcp execution", () => {
     await host.connectServer(createServerConfig());
     const tool = host.getSnapshot().tools[0];
     const result = await host.callToolByOpenRouterName(tool.openRouterName, { owner: "me" });
-    expect(result).toEqual({ repos: 3 });
+    expect(result.result).toEqual({ repos: 3 });
     expect(callTool).toHaveBeenCalledTimes(1);
   });
 
@@ -298,6 +329,90 @@ describe("mcp execution", () => {
     await host.connectServer(createServerConfig());
     const toolName = host.getSnapshot().tools[0].openRouterName;
     await expect(host.callToolByOpenRouterName(toolName, {})).rejects.toThrow("permission denied");
+  });
+
+  it("attaches appView when tool provides ui resource", async () => {
+    const host = new McpHost(
+      createBridge({
+        connectServer: vi.fn(async () => ({
+          serverId: "server-1",
+          status: "Connected",
+          tools: [
+            {
+              name: "open_board",
+              description: "Open board",
+              inputSchema: { type: "object", properties: {} },
+              appResourceUri: "ui://board/index.html",
+            },
+          ],
+          warning: null,
+        })),
+        callTool: vi.fn(async () => ({ result: { ok: true } })),
+        readResource: vi.fn(async () => ({
+          result: {
+            contents: [
+              {
+                uri: "ui://board/index.html",
+                mimeType: "text/html",
+                text: "<html><body>Board</body></html>",
+              },
+            ],
+          },
+        })),
+      })
+    );
+
+    await host.connectServer(createServerConfig());
+    const toolName = host.getSnapshot().tools[0].openRouterName;
+    const output = await host.callToolByOpenRouterName(toolName, { title: "demo" });
+
+    expect(output.result).toEqual({ ok: true });
+    expect(output.appView?.resourceUri).toBe("ui://board/index.html");
+    expect(output.appView?.html).toContain("Board");
+  });
+
+  it("attaches appView when tool result returns openai output template uri", async () => {
+    const host = new McpHost(
+      createBridge({
+        connectServer: vi.fn(async () => ({
+          serverId: "server-1",
+          status: "Connected",
+          tools: [
+            {
+              name: "draw_diagram",
+              description: "Draw diagram",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ],
+          warning: null,
+        })),
+        callTool: vi.fn(async () => ({
+          result: {
+            _meta: {
+              "openai/outputTemplate": "ui://excalidraw/app.html",
+            },
+          },
+        })),
+        readResource: vi.fn(async () => ({
+          result: {
+            contents: [
+              {
+                uri: "ui://excalidraw/app.html",
+                mimeType: "text/html",
+                text: "<html><body>Excalidraw</body></html>",
+              },
+            ],
+          },
+        })),
+      })
+    );
+
+    await host.connectServer(createServerConfig());
+    const toolName = host.getSnapshot().tools[0].openRouterName;
+    const output = await host.callToolByOpenRouterName(toolName, {});
+
+    expect(output.appView?.resourceUri).toBe("ui://excalidraw/app.html");
+    expect(output.appView?.html).toContain("Excalidraw");
   });
 });
 

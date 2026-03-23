@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useTr } from "../lib/i18n";
 import { useChatStore } from "../store/useChatStore";
 import MessageBubble from "./MessageBubble";
 
 function ChatWindow() {
+  const { t } = useTr();
   const conversations = useChatStore((state) => state.conversations);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
   const isStreaming = useChatStore((state) => state.isStreaming);
@@ -46,9 +48,9 @@ function ChatWindow() {
           </div>
         ) : (
           <div className="mx-auto mt-24 max-w-xl text-center">
-            <p className="text-2xl font-medium tracking-tight">Jessie desktop chat</p>
+            <p className="text-2xl font-medium tracking-tight">{t("Jessie desktop chat", "Jessie 桌面聊天")}</p>
             <p className="mt-3 text-sm text-[var(--text-secondary)]">
-              Start a conversation from the input bar below.
+              {t("Start a conversation from the input bar below.", "从下方输入框开始对话。")}
             </p>
           </div>
         )}
@@ -61,7 +63,7 @@ function ChatWindow() {
               onClick={clearError}
               className="rounded-md px-2 py-1 text-xs text-red-200 transition hover:bg-red-500/20"
             >
-              Dismiss
+              {t("Dismiss", "关闭")}
             </button>
           </div>
         )}

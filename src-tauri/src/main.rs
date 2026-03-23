@@ -10,7 +10,9 @@ fn main() {
             mcp::mcp_disconnect_server,
             mcp::mcp_get_server_statuses,
             mcp::mcp_refresh_server_tools,
-            mcp::mcp_call_tool
+            mcp::mcp_call_tool,
+            mcp::mcp_read_resource,
+            mcp::mcp_request
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
