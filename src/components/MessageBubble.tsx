@@ -67,11 +67,48 @@ const toListResourceTemplatesResult = (value: unknown): ListResourceTemplatesRes
   };
 };
 
+const MCP_IFRAME_CSP = [
+  "default-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+  "connect-src 'none'",
+  "img-src data: blob:",
+  "font-src data:",
+  "style-src 'unsafe-inline'",
+  "script-src 'unsafe-inline'",
+].join("; ");
+
+const buildSandboxedAppHtml = (html: string) => `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="${MCP_IFRAME_CSP}" />
+  </head>
+  <body>
+${html}
+  </body>
+</html>`;
+
+const openSafeExternalLink = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return false;
+    }
+    window.open(parsed.toString(), "_blank", "noopener,noreferrer");
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 function McpAppCard({ appView }: { appView: ChatAppView }) {
   const { t } = useTr();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const requestFromServer = useMcpStore((state) => state.requestFromServer);
+  const sandboxedHtml = buildSandboxedAppHtml(appView.html);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -102,7 +139,7 @@ function McpAppCard({ appView }: { appView: ChatAppView }) {
       );
 
       bridge.onopenlink = async ({ url }) => {
-        window.open(url, "_blank", "noopener,noreferrer");
+        openSafeExternalLink(url);
         return {};
       };
 
@@ -173,7 +210,7 @@ function McpAppCard({ appView }: { appView: ChatAppView }) {
   }, [
     appView.serverId,
     appView.resourceUri,
-    appView.html,
+    sandboxedHtml,
     appView.toolResult,
     appView.toolArguments,
     requestFromServer,
@@ -188,7 +225,7 @@ function McpAppCard({ appView }: { appView: ChatAppView }) {
           <button
             type="button"
             onClick={() => {
-              const blob = new Blob([appView.html], { type: "text/html;charset=utf-8" });
+              const blob = new Blob([sandboxedHtml], { type: "text/html;charset=utf-8" });
               const url = URL.createObjectURL(blob);
               window.open(url, "_blank", "noopener,noreferrer");
               window.setTimeout(() => URL.revokeObjectURL(url), 15_000);
@@ -210,8 +247,8 @@ function McpAppCard({ appView }: { appView: ChatAppView }) {
       <iframe
         key={`${appView.serverId}:${appView.resourceUri}:${reloadKey}`}
         ref={iframeRef}
-        sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads"
-        srcDoc={appView.html}
+        sandbox="allow-scripts allow-forms"
+        srcDoc={sandboxedHtml}
         title={appView.title || appView.toolName}
         className="h-[420px] w-full rounded-lg border border-[color:var(--border)] bg-white"
       />

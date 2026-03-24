@@ -36,6 +36,59 @@ Jessie addresses these pain points with a practical local-first architecture and
    - Focused settings model.
    - Low-friction defaults for daily work.
 
+## Capability Matrix: Jessie vs Generic Chat
+
+| Capability | Jessie | Generic Chat |
+| --- | --- | --- |
+| Multi-model access | Unified model access through OpenRouter | Usually tied to one provider or a small fixed set |
+| Task-level model routing | Pick fast/cheap/reasoning-strong models by task | One model strategy for most tasks |
+| Real-time web retrieval | Tavily API is executed as a real tool call | Often prompt-level claims without verifiable tool execution |
+| External tools | MCP host for local and remote MCP servers | Limited built-in integrations |
+| Memory quality control | Strict extraction gate + dedupe + supersede rules | Often stores noisy conversational fragments |
+| Reliability diagnostics | Typed errors with explicit user-facing messages | Vague failures like empty/unknown responses |
+| Failure isolation | Tool/memory/title failures are isolated from core chat path | Subsystem failures can break full flow |
+| Privacy boundary | Local-first storage by default | Frequently cloud-first by default |
+| Maintainability | Explicit module boundaries for chat/tools/memory/runtime | Tighter coupling across features |
+
+## What OpenRouter Unlocks
+
+OpenRouter is not used here as a simple "model dropdown." In Jessie, it enables capability-level gains:
+
+1. One integration point, many model families
+   - Keep a single chat pipeline while switching providers/models as needed.
+2. Task-level model choice inside one workflow
+   - Draft quickly with lower-latency models, then switch to stronger reasoning models for critical steps.
+3. Practical quality/speed/cost control
+   - Make explicit tradeoffs per task instead of forcing one default for everything.
+4. Lower provider lock-in risk
+   - Jessie stays stable even when your preferred model mix changes over time.
+5. Better fit with tools and memory
+   - The same model layer works with Tavily, MCP tools, and memory injection without redesigning app flow.
+
+## Real Workflow Scenarios
+
+1. Research workflow
+   - Ask a current-events question.
+   - Model triggers `web_search`, Jessie calls Tavily, then returns tool output into generation.
+   - If the tool fails, Jessie shows a clear, actionable error instead of pretending it searched.
+2. Development workflow
+   - Use a faster model for drafting and a stronger model for review/refinement.
+   - Durable preferences (style, constraints) are remembered and reused across sessions.
+   - Non-critical memory/title failures are isolated and do not block the main answer.
+3. Visual collaboration workflow
+   - Connect an MCP App server (for example, Excalidraw MCP).
+   - Execute MCP tools and render app resources in chat when provided by the server.
+   - If app resources are unavailable, Jessie degrades to text output cleanly.
+
+## Non-Goals
+
+Jessie intentionally avoids "fake capability" patterns:
+
+1. No fabricated web search results.
+2. No hidden tool failures behind generic success text.
+3. No UI clutter from unnecessary toggles.
+4. No overpromising beyond currently implemented architecture.
+
 ## Memory System (v2+) Logic
 
 Jessie memory is intentionally conservative:
@@ -168,6 +221,58 @@ Jessie 的目标是用更务实的本地架构，把这些问题逐个解决。
    - 设置结构克制、可理解。
    - 默认行为适配高频使用。
 
+## 能力对比矩阵：Jessie vs 普通聊天
+
+| 能力项 | Jessie | 普通聊天 |
+| --- | --- | --- |
+| 多模型接入 | 通过 OpenRouter 统一接入多模型生态 | 通常绑定单一厂商或少量固定模型 |
+| 任务级模型选择 | 可按任务选择速度/成本/推理能力不同的模型 | 多数场景用同一模型策略 |
+| 实时联网检索 | Tavily 作为真实工具调用执行 | 常见为提示词层“可联网”声明，缺乏可验证执行 |
+| 外部工具扩展 | 作为 MCP Host 支持本地与远程 MCP server | 集成能力通常受限于内置工具 |
+| 记忆质量控制 | 严格提取门控 + 去重 + 可覆盖更新 | 容易积累噪声对话片段 |
+| 可诊断性 | Typed error + 明确用户提示 | 常见模糊报错（空返回/未知错误） |
+| 故障隔离 | 工具/记忆/标题失败不拖垮主对话 | 子系统异常可能影响整条链路 |
+| 隐私边界 | 默认本地优先存储 | 常见云优先 |
+| 可维护性 | 聊天/工具/记忆/运行时边界清晰 | 功能耦合更高，演进成本更大 |
+
+## OpenRouter 带来的能力
+
+在 Jessie 里，OpenRouter 不是“多一个模型下拉框”，而是能力层面的放大器：
+
+1. 单入口接入多模型生态
+   - 保持同一套聊天主链路，同时按需切换不同模型与提供方。
+2. 同一工作流内做任务级选型
+   - 起草阶段可选低延迟模型，关键推理阶段切到更强模型。
+3. 质量/速度/成本可实际权衡
+   - 按任务显式做取舍，而不是被迫用一个默认模型覆盖所有场景。
+4. 降低厂商锁定风险
+   - 你的模型组合变化时，Jessie 的工作流仍可稳定延续。
+5. 与工具链和记忆链路协同
+   - 同一模型层可以无缝配合 Tavily、MCP 与记忆注入，无需重构流程。
+
+## 真实工作流场景
+
+1. 研究场景
+   - 提问后，模型触发 `web_search`，Jessie 调用 Tavily 并把结果回注给模型。
+   - 若工具失败，会给出可操作报错，不会伪装成“已联网”。
+2. 开发场景
+   - 用快模型完成草稿，再用强推理模型做审阅与收敛。
+   - 长期偏好（表达风格、约束）可跨会话复用。
+   - 即使记忆或标题子流程异常，也不会阻断主回复。
+3. 可视化协作场景
+   - 连接 MCP Apps server（例如 Excalidraw MCP）。
+   - 工具执行后可在聊天中渲染 server 提供的 app 资源。
+   - 资源不可用时优雅降级为文本，不中断对话。
+
+## Non-Goals / 边界声明
+
+Jessie 明确不做这些“伪能力”：
+
+1. 不伪造联网搜索结果。
+2. 不隐藏工具失败并假装成功。
+3. 不用大量无效开关堆砌 UI。
+4. 不对未实现能力做超前承诺。
+
 ## 记忆系统（v2+）逻辑
 
 Jessie 的记忆策略是“宁缺毋滥”：
@@ -263,4 +368,3 @@ npm run tauri:build
 MIT，详见 [LICENSE](./LICENSE)。
 
 </details>
-

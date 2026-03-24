@@ -12,6 +12,7 @@ import {
   formatMemory,
   retrieveRelevantMemory,
 } from "../lib/memoryEngine";
+import { DEBUG } from "../lib/debug";
 import type { ChatMessage } from "../types/chat";
 import type { MemoryItem, MemoryType, ProfileMemory } from "../types/memory";
 
@@ -650,17 +651,19 @@ export const useMemoryStore = create<MemoryState>()(
             candidates = fallbackResult.candidates;
           }
 
-          console.log("[Jessie][Memory][Extract]", {
-            candidateCount: candidates.length,
-            acceptedCount: accepted.length,
-            decisions: classified.map(({ entry, decision }) => ({
-              original: entry.content,
-              category: decision.category,
-              confidence: decision.confidence,
-              summary: decision.summary,
-              rationale: decision.rationale,
-            })),
-          });
+          if (DEBUG) {
+            console.log("[Jessie][Memory][Extract]", {
+              candidateCount: candidates.length,
+              acceptedCount: accepted.length,
+              decisions: classified.map(({ entry, decision }) => ({
+                original: entry.content,
+                category: decision.category,
+                confidence: decision.confidence,
+                summary: decision.summary,
+                rationale: decision.rationale,
+              })),
+            });
+          }
 
           if (accepted.length === 0) {
             return 0;

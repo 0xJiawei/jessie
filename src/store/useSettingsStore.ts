@@ -204,7 +204,43 @@ const sanitizeMcpServers = (value: unknown) => {
             : true,
       });
       return acc;
-    }, []);
+	    }, []);
+};
+
+const scrubPersistedApiKeys = () => {
+  try {
+    const raw = window.localStorage.getItem("jessie-settings");
+    if (!raw) {
+      return;
+    }
+
+    const parsed = JSON.parse(raw) as {
+      state?: Record<string, unknown>;
+      version?: number;
+    };
+
+    if (!parsed.state || typeof parsed.state !== "object" || Array.isArray(parsed.state)) {
+      return;
+    }
+
+    if (!("apiKey" in parsed.state) && !("tavilyApiKey" in parsed.state)) {
+      return;
+    }
+
+    const nextState = { ...parsed.state };
+    delete nextState.apiKey;
+    delete nextState.tavilyApiKey;
+
+    window.localStorage.setItem(
+      "jessie-settings",
+      JSON.stringify({
+        ...parsed,
+        state: nextState,
+      })
+    );
+  } catch {
+    // no-op: best-effort cleanup
+  }
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -316,8 +352,6 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "jessie-settings",
       partialize: (state) => ({
-        apiKey: state.apiKey,
-        tavilyApiKey: state.tavilyApiKey,
         language: state.language,
         models: state.models,
         defaultModelId: state.defaultModelId,
@@ -354,9 +388,9 @@ export const useSettingsStore = create<SettingsState>()(
         return {
           ...currentState,
           ...persisted,
+          apiKey: currentState.apiKey,
+          tavilyApiKey: currentState.tavilyApiKey,
           models,
-          tavilyApiKey:
-            typeof persisted.tavilyApiKey === "string" ? persisted.tavilyApiKey : currentState.tavilyApiKey,
           webSearchToolEnabled: true,
           fileUploadEnabled: true,
           imageInputEnabled: true,
@@ -402,6 +436,9 @@ export const useSettingsStore = create<SettingsState>()(
               ? persisted.settingsTab
               : currentState.settingsTab,
         };
+      },
+      onRehydrateStorage: () => {
+        scrubPersistedApiKeys();
       },
     }
   )

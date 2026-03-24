@@ -1,1 +1,1 @@
-export const DEBUG = true;
+export const DEBUG = import.meta.env.DEV;

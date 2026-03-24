@@ -484,6 +484,8 @@ const extractAppResourceUriFromToolResult = (result: unknown) => {
   return "";
 };
 
+const isTrustedAppResourceUri = (uri: string) => /^ui:\/\//i.test(uri.trim());
+
 export class McpHost {
   private readonly bridge: McpBridge;
   private readonly servers = new Map<string, ServerRecord>();
@@ -758,8 +760,8 @@ export class McpHost {
       });
 
       let appView: McpAppView | undefined;
-      const resourceUri = tool.appResourceUri || extractAppResourceUriFromToolResult(response.result);
-      if (resourceUri) {
+      const resourceUri = (tool.appResourceUri || extractAppResourceUriFromToolResult(response.result)).trim();
+      if (resourceUri && isTrustedAppResourceUri(resourceUri)) {
         try {
           const readResult = await this.bridge.readResource({
             serverId: tool.sourceServerId,

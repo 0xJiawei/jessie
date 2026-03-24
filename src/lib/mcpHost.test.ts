@@ -414,6 +414,49 @@ describe("mcp execution", () => {
     expect(output.appView?.resourceUri).toBe("ui://excalidraw/app.html");
     expect(output.appView?.html).toContain("Excalidraw");
   });
+
+  it("ignores non-ui app resource uri values", async () => {
+    const readResource = vi.fn(async () => ({
+      result: {
+        contents: [
+          {
+            uri: "https://example.com/app.html",
+            mimeType: "text/html",
+            text: "<html><body>Should not load</body></html>",
+          },
+        ],
+      },
+    }));
+    const host = new McpHost(
+      createBridge({
+        connectServer: vi.fn(async () => ({
+          serverId: "server-1",
+          status: "Connected",
+          tools: [
+            {
+              name: "open_unsafe_app",
+              description: "Open app",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ],
+          warning: null,
+        })),
+        callTool: vi.fn(async () => ({
+          result: {
+            appResourceUri: "https://example.com/app.html",
+          },
+        })),
+        readResource,
+      })
+    );
+
+    await host.connectServer(createServerConfig());
+    const toolName = host.getSnapshot().tools[0].openRouterName;
+    const output = await host.callToolByOpenRouterName(toolName, {});
+
+    expect(output.appView).toBeUndefined();
+    expect(readResource).not.toHaveBeenCalled();
+  });
 });
 
 describe("mcp integration boundaries", () => {
