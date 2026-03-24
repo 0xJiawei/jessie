@@ -1,33 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import ChatWindow from "./components/ChatWindow";
 import InputBar from "./components/InputBar";
 import SettingsPanel from "./components/SettingsPanel";
 import Sidebar from "./components/Sidebar";
 import ToastViewport from "./components/ToastViewport";
-import { useTr } from "./lib/i18n";
 import { useChatStore } from "./store/useChatStore";
 import { useMcpStore } from "./store/useMcpStore";
 import { useSettingsStore } from "./store/useSettingsStore";
-import { useToastStore } from "./store/useToastStore";
 
 function App() {
-  const { t } = useTr();
   const theme = useSettingsStore((state) => state.theme);
   const fontSize = useSettingsStore((state) => state.fontSize);
   const uiScale = useSettingsStore((state) => state.uiScale);
-  const closeBehavior = useSettingsStore((state) => state.closeBehavior);
   const mcpServers = useSettingsStore((state) => state.mcpServers);
   const mcpAllowedDomains = useSettingsStore((state) => state.mcpAllowedDomains);
-  const setCloseBehavior = useSettingsStore((state) => state.setCloseBehavior);
   const createConversation = useChatStore((state) => state.createConversation);
   const syncMcpWithSettings = useMcpStore((state) => state.syncWithSettings);
-  const pushToast = useToastStore((state) => state.pushToast);
-
-  const [closePromptOpen, setClosePromptOpen] = useState(false);
-  const [closeAction, setCloseAction] = useState<"quit" | "minimize">("minimize");
-  const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const appWindowRef = useRef<null | { close: () => Promise<void>; minimize: () => Promise<void> }>(null);
-  const allowCloseRef = useRef(false);
 
   useEffect(() => {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -57,89 +45,6 @@ function App() {
     void syncMcpWithSettings(mcpServers, mcpAllowedDomains);
   }, [mcpServers, mcpAllowedDomains, syncMcpWithSettings]);
 
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    const register = async () => {
-      try {
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        const appWindow = getCurrentWindow();
-        appWindowRef.current = appWindow;
-
-        unlisten = await appWindow.onCloseRequested(async (event) => {
-          if (allowCloseRef.current) {
-            return;
-          }
-
-          event.preventDefault();
-
-          try {
-            if (closeBehavior === "quit") {
-              allowCloseRef.current = true;
-              await appWindow.close();
-              return;
-            }
-
-            if (closeBehavior === "minimize") {
-              await appWindow.minimize();
-              return;
-            }
-
-            setCloseAction("minimize");
-            setRememberCloseChoice(false);
-            setClosePromptOpen(true);
-          } catch (error) {
-            allowCloseRef.current = false;
-            const message = error instanceof Error ? error.message : "Close action failed.";
-            pushToast(message, "error");
-          }
-        });
-      } catch {
-        // Running outside Tauri window context.
-      }
-    };
-
-    void register();
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [closeBehavior, pushToast]);
-
-  const runCloseAction = async (action: "quit" | "minimize") => {
-    const appWindow = appWindowRef.current;
-    if (!appWindow) {
-      return;
-    }
-
-    if (rememberCloseChoice) {
-      setCloseBehavior(action);
-      pushToast(
-        action === "quit"
-          ? t("Will quit on close", "关闭时将退出应用")
-          : t("Will minimize on close", "关闭时将最小化应用"),
-        "success"
-      );
-    }
-
-    if (action === "minimize") {
-      await appWindow.minimize();
-      setClosePromptOpen(false);
-      return;
-    }
-
-    allowCloseRef.current = true;
-    setClosePromptOpen(false);
-    try {
-      await appWindow.close();
-    } catch (error) {
-      allowCloseRef.current = false;
-      const message = error instanceof Error ? error.message : "Close action failed.";
-      pushToast(message, "error");
-    }
-  };
-
   return (
     <div
       className="h-screen w-screen overflow-hidden bg-[var(--app-bg)] text-[var(--text-primary)]"
@@ -157,60 +62,6 @@ function App() {
         <SettingsPanel />
         <ToastViewport />
       </div>
-
-      {closePromptOpen && (
-        <div className="fixed inset-0 z-[91] flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-xl border border-[color:var(--border)] bg-[var(--panel-bg)] p-4 shadow-panel">
-            <p className="text-sm font-medium text-[var(--text-primary)]">{t("Close Jessie", "关闭 Jessie")}</p>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              {t("Do you want to quit Jessie or minimize it to the dock?", "你想退出 Jessie，还是最小化到 Dock？")}
-            </p>
-
-            <div className="mt-3 space-y-1.5">
-              <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                <input
-                  type="radio"
-                  checked={closeAction === "minimize"}
-                  onChange={() => setCloseAction("minimize")}
-                />
-                {t("Minimize", "最小化")}
-              </label>
-              <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
-                <input type="radio" checked={closeAction === "quit"} onChange={() => setCloseAction("quit")} />
-                {t("Quit", "退出")}
-              </label>
-            </div>
-
-            <label className="mt-3 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-              <input
-                type="checkbox"
-                checked={rememberCloseChoice}
-                onChange={(event) => setRememberCloseChoice(event.target.checked)}
-              />
-              {t("Remember my choice", "记住我的选择")}
-            </label>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setClosePromptOpen(false)}
-                className="h-8 rounded-lg border border-[color:var(--border)] bg-[var(--surface-muted)] px-3 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-bg)]"
-              >
-                {t("Cancel", "取消")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void runCloseAction(closeAction);
-                }}
-                className="h-8 rounded-lg border border-[color:var(--border)] bg-[var(--message-user)] px-3 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface-muted)]"
-              >
-                {closeAction === "quit" ? t("Quit", "退出") : t("Minimize", "最小化")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

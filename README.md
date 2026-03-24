@@ -1,138 +1,205 @@
 # Jessie
 
+A minimal, OpenRouter-based desktop AI chat client built for daily serious work.
+
+<p align="center">
+  <img src="./src-tauri/icons/icon.png" width="96" alt="Jessie icon" />
+</p>
+
+<p align="center">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8D8?style=flat-square&logo=tauri" />
+  <img alt="React 18" src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black" />
+  <img alt="TypeScript 5" src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" />
+  <img alt="OpenRouter Based" src="https://img.shields.io/badge/OpenRouter-Based-111827?style=flat-square" />
+  <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-16A34A?style=flat-square" />
+</p>
+
 <details open>
 <summary><strong>English</strong></summary>
 
+## Table of Contents
+
+1. [What Jessie Is](#what-jessie-is)
+2. [Why Jessie Exists](#why-jessie-exists)
+3. [Jessie vs Generic Chat Clients](#jessie-vs-generic-chat-clients)
+4. [What OpenRouter Unlocks](#what-openrouter-unlocks)
+5. [Product Strengths](#product-strengths)
+6. [Screenshots](#screenshots)
+7. [Run as a Desktop App (Production)](#run-as-a-desktop-app-production)
+8. [Real Workflow Scenarios](#real-workflow-scenarios)
+9. [Memory System (Quality-First)](#memory-system-quality-first)
+10. [Tooling](#tooling)
+11. [Non-Goals](#non-goals)
+12. [Quick Start](#quick-start)
+
 ## What Jessie Is
 
-Jessie is a local-first desktop AI workspace built with **Tauri + React + TypeScript**, powered by **OpenRouter**.
+Jessie is a **local-first desktop AI client** built with **Tauri + React + TypeScript**.  
+It focuses on one thing: making AI chat reliable and genuinely useful in real workflows.
 
-It is designed for daily, serious use: fast chat, reliable memory, real tool execution, and low-noise UX.
+Core principles:
 
-## Why We Built It
+1. High signal, low noise
+2. Minimal but powerful UX
+3. Real tool execution (no fake capabilities)
+4. Explicit reliability boundaries
 
-Most AI chat apps fail real daily workflows because they are:
+## Why Jessie Exists
 
-1. Stateless: every chat forgets your long-term context.
-2. Opaque: tool failures are hidden behind vague messages.
-3. Cloud-heavy: data leaves your machine by default.
-4. Noisy: too many toggles, too little signal.
+Many chat apps are impressive in demos but weak in daily work:
 
-Jessie addresses these pain points with a practical local-first architecture and strict reliability boundaries.
+1. They forget your durable context.
+2. They hide failures behind vague messages.
+3. They overcomplicate settings but underdeliver utility.
+4. They make model choice rigid or provider-locked.
 
-## Core Product Advantages
+Jessie is designed to solve these problems with a practical, local-first architecture.
 
-1. Local-first persistence
-   - Chats, settings, and memory are stored locally.
-   - No remote telemetry pipeline is required.
-2. Real tool execution
-   - Tavily web search is executed for real (not prompt-faked).
-   - MCP tools are executed against connected servers.
-3. Reliability-first chat pipeline
-   - Typed error categories.
-   - Clear user-facing failure messages.
-   - Non-critical subsystems (memory/title/persistence) do not crash the full response path.
-4. Minimal UX with high signal
-   - Focused settings model.
-   - Low-friction defaults for daily work.
+## Jessie vs Generic Chat Clients
 
-## Capability Matrix: Jessie vs Generic Chat
-
-| Capability | Jessie | Generic Chat |
+| Capability | Jessie | Generic Chat Client |
 | --- | --- | --- |
-| Multi-model access | Unified model access through OpenRouter | Usually tied to one provider or a small fixed set |
-| Task-level model routing | Pick fast/cheap/reasoning-strong models by task | One model strategy for most tasks |
-| Real-time web retrieval | Tavily API is executed as a real tool call | Often prompt-level claims without verifiable tool execution |
-| External tools | MCP host for local and remote MCP servers | Limited built-in integrations |
-| Memory quality control | Strict extraction gate + dedupe + supersede rules | Often stores noisy conversational fragments |
-| Reliability diagnostics | Typed errors with explicit user-facing messages | Vague failures like empty/unknown responses |
-| Failure isolation | Tool/memory/title failures are isolated from core chat path | Subsystem failures can break full flow |
-| Privacy boundary | Local-first storage by default | Frequently cloud-first by default |
-| Maintainability | Explicit module boundaries for chat/tools/memory/runtime | Tighter coupling across features |
+| Model ecosystem | OpenRouter-based multi-model access from one app | Often tied to one provider or narrow model choices |
+| Task-level model routing | Pick different models for drafting, reasoning, and finalization | Usually one model strategy for everything |
+| Real web search | Tavily is executed as an actual tool call | Often prompt-level “I can browse” behavior without true calls |
+| External tools | MCP host (stdio + remote HTTP, with fallback) | Limited, fixed integrations |
+| Memory quality | Conservative extraction + semantic gating + dedupe/supersede | Frequently stores noisy conversation fragments |
+| Reliability visibility | Typed errors with clear user-facing messages | “No content” or opaque failures are common |
+| Failure isolation | Tool/memory/title failures do not collapse core response path | Subsystem failures often break the whole flow |
+| Privacy posture | Local-first persistence by default | Commonly cloud-first by default |
+| Product complexity | Minimal UI with focused controls | Feature-heavy but higher cognitive load |
 
 ## What OpenRouter Unlocks
 
-OpenRouter is not used here as a simple "model dropdown." In Jessie, it enables capability-level gains:
+Jessie is not just “compatible with OpenRouter.” It is **OpenRouter-based by design**.
 
-1. One integration point, many model families
-   - Keep a single chat pipeline while switching providers/models as needed.
-2. Task-level model choice inside one workflow
-   - Draft quickly with lower-latency models, then switch to stronger reasoning models for critical steps.
-3. Practical quality/speed/cost control
-   - Make explicit tradeoffs per task instead of forcing one default for everything.
-4. Lower provider lock-in risk
-   - Jessie stays stable even when your preferred model mix changes over time.
-5. Better fit with tools and memory
-   - The same model layer works with Tavily, MCP tools, and memory injection without redesigning app flow.
+1. One integration, broad model coverage
+   - Switch model families without changing your workflow.
+2. Better decisions per task
+   - Use faster/cheaper models for drafting, stronger models for difficult reasoning.
+3. Practical quality-speed-cost control
+   - Make explicit tradeoffs instead of relying on one global default.
+4. Lower lock-in risk
+   - Your app workflow stays stable even if your preferred model stack changes.
+5. Better orchestration with tools and memory
+   - Model calls, tool calls, and memory injection stay in one coherent pipeline.
+
+## Product Strengths
+
+1. Minimal, high-clarity UI
+   - Clean interaction surfaces and reduced cognitive noise.
+2. Fast and smooth interaction loop
+   - Streaming chat with responsive desktop UX.
+3. Local-first data model
+   - Chats, settings, and memory persist locally.
+4. Reliability-first behavior
+   - Non-critical subsystem failures are isolated.
+5. Honest capability boundaries
+   - No fabricated web results and no hidden tool failures.
+
+## Screenshots
+
+Main window preview:
+
+![Jessie Main UI](./ui.png)
+
+## Run as a Desktop App (Production)
+
+You do not need to run Jessie in dev mode every time. Build a production app once, then launch it like a normal macOS application.
+
+1. Build the app bundle
+
+```bash
+npm install
+npm run tauri:build
+```
+
+2. Locate build output (macOS)
+   - DMG: `src-tauri/target/release/bundle/dmg/`
+   - APP bundle: `src-tauri/target/release/bundle/macos/`
+3. Install
+   - Open the generated `.dmg` and drag `Jessie.app` into `Applications`.
+4. Launch Jessie from `Applications` (or Spotlight), no terminal required.
+5. If macOS blocks first launch
+   - Open `System Settings > Privacy & Security` and click `Open Anyway` for Jessie.
+
+API key persistence note:
+
+1. OpenRouter/Tavily keys and settings are saved locally by the app.
+2. After packaging and normal launch, you do not need to re-enter keys on every start.
+3. Data remains local to your machine unless you explicitly share/export it.
 
 ## Real Workflow Scenarios
 
 1. Research workflow
-   - Ask a current-events question.
-   - Model triggers `web_search`, Jessie calls Tavily, then returns tool output into generation.
-   - If the tool fails, Jessie shows a clear, actionable error instead of pretending it searched.
-2. Development workflow
-   - Use a faster model for drafting and a stronger model for review/refinement.
-   - Durable preferences (style, constraints) are remembered and reused across sessions.
-   - Non-critical memory/title failures are isolated and do not block the main answer.
-3. Visual collaboration workflow
-   - Connect an MCP App server (for example, Excalidraw MCP).
-   - Execute MCP tools and render app resources in chat when provided by the server.
-   - If app resources are unavailable, Jessie degrades to text output cleanly.
+   - Ask a time-sensitive question.
+   - Model triggers `web_search`; Jessie calls Tavily and feeds tool output back into generation.
+   - If search fails, the user gets a clear error instead of hallucinated “live data.”
+2. Engineering workflow
+   - Draft with a fast model, then switch to a stronger reasoning model for review.
+   - Durable preferences are retained through memory and reused in later sessions.
+3. MCP Apps workflow
+   - Connect MCP servers (for example, Excalidraw MCP).
+   - Use discovered tools through Jessie’s tool-calling path.
+   - When app resources exist, render embedded app views in chat.
 
-## Non-Goals
+## Memory System (Quality-First)
 
-Jessie intentionally avoids "fake capability" patterns:
+Jessie memory is intentionally conservative: better to miss weak memory than store junk.
 
-1. No fabricated web search results.
-2. No hidden tool failures behind generic success text.
-3. No UI clutter from unnecessary toggles.
-4. No overpromising beyond currently implemented architecture.
+1. Allowed durable categories
+   - Preference
+   - Identity fact
+   - Long-term project context
+   - Standing instruction
+2. Rejected categories
+   - One-off tasks
+   - Temporary plans
+   - Generic Q&A fragments
+   - Assistant-style output text
+3. Quality controls
+   - Explicit semantic gating before persistence
+   - Near-duplicate detection and merging
+   - Supersede policy for updated preferences/facts
+4. Efficiency controls
+   - Memory path is English-normalized
+   - Chinese user input is translated to English for retrieval/injection
+   - Long memories are LLM-compressed and cached
 
-## Memory System (v2+) Logic
-
-Jessie memory is intentionally conservative:
-
-1. Retrieval
-   - Ranked by pin, recency, keyword overlap, and weight.
-   - Deduped before prompt injection.
-2. Extraction
-   - Extracted from conversation with strict semantic filtering.
-   - Only durable memory is accepted: preference / identity / project context / standing instruction.
-   - Temporary tasks, one-off requests, generic Q&A, and assistant-style outputs are rejected.
-3. Conflict + dedupe
-   - Near-duplicates are merged.
-   - Newer stronger memories can supersede old variants.
-4. English-normalized memory path
-   - Memory context is unified in English.
-   - If user input is Chinese, Jessie translates it to English before memory retrieval/injection path.
-   - Long memories are compressed by LLM into concise durable English context and cached for token efficiency.
-
-## Tooling: Web Search + MCP
+## Tooling
 
 ### Tavily Web Search
 
 1. Model emits tool call (`web_search`).
 2. Jessie calls Tavily Search API.
-3. Tool result is returned as tool message.
-4. Model continues final generation.
+3. Tool result returns as tool message.
+4. Model continues generation.
 
-If Tavily is unavailable, Jessie degrades clearly (no fabricated results).
+If Tavily is unavailable, Jessie fails clearly and does not fabricate search output.
 
-### MCP (v1 host foundation)
+### MCP (Host v1)
 
 Supported:
 
-1. Local `stdio` MCP servers.
-2. Remote HTTP MCP servers (Streamable HTTP + legacy SSE fallback).
-3. Tool discovery + namespacing + execution.
-4. MCP Apps rendering in chat bubble (when UI resource is provided).
+1. Local stdio MCP servers
+2. Remote HTTP MCP servers (Streamable HTTP with legacy SSE fallback)
+3. Tool discovery, namespacing, and execution
+4. MCP app resource rendering in chat when available
 
-Security for remote MCP:
+Remote MCP security baseline:
 
-1. HTTPS only.
-2. Domain allowlist enforcement.
-3. Per-server headers supported.
+1. HTTPS only
+2. Domain allowlist
+3. Per-server custom headers
+
+## Non-Goals
+
+Jessie deliberately avoids:
+
+1. Fake tool/web capabilities
+2. Overloaded “control panel” settings UX
+3. Silent failure masking
+4. Over-engineered architecture beyond practical needs
 
 ## Tech Stack
 
@@ -142,6 +209,7 @@ Security for remote MCP:
 4. TailwindCSS
 5. OpenRouter Chat Completions API
 6. Tavily Search API
+7. MCP host runtime (frontend + Rust backend)
 
 ## Quick Start
 
@@ -154,30 +222,31 @@ npm run tauri:dev
 
 ```bash
 npm run build
+npm run test
 npm run tauri:build
 ```
 
-## Required Config
+## Required Settings
 
-Set keys in Settings:
+Configure in-app settings:
 
 1. OpenRouter API Key
-2. Tavily API Key (for real-time search)
+2. Tavily API Key (for web search)
 
 ## Main Modules
 
 1. `src/store/useChatStore.ts` — chat pipeline, streaming, tool loop, reliability boundaries
 2. `src/store/useMemoryStore.ts` — memory import/extract/retrieve/injection/compression
-3. `src/lib/memoryQuality.ts` — semantic gating for memory acceptance
+3. `src/lib/memoryQuality.ts` — explicit memory quality gating
 4. `src/lib/openrouter.ts` — OpenRouter request layer
-5. `src/lib/mcpHost.ts` + `src-tauri/src/mcp.rs` — MCP host runtime and dispatch
-6. `src/components/settings/*` — settings UI
+5. `src/lib/mcpHost.ts` + `src-tauri/src/mcp.rs` — MCP runtime/discovery/execution
+6. `src/components/settings/*` — settings experience
 
 ## Security Notes
 
 1. Never commit real API keys.
 2. Keep `.env*` and private exports out of version control.
-3. Use `SECURITY.md` process for vulnerability reporting.
+3. Report vulnerabilities via `SECURITY.md`.
 
 ## License
 
@@ -188,135 +257,189 @@ MIT. See [LICENSE](./LICENSE).
 <details>
 <summary><strong>简体中文</strong></summary>
 
+## 目录
+
+1. Jessie 是什么
+2. 为什么要做 Jessie
+3. Jessie vs 普通聊天客户端
+4. OpenRouter 带来的核心能力
+5. 产品核心优势
+6. 截图
+7. 以桌面 App 形式运行（生产环境）
+8. 真实工作流场景
+9. 记忆系统（质量优先）
+10. 工具能力
+11. Non-Goals / 边界声明
+12. 快速开始
+
 ## Jessie 是什么
 
-Jessie 是一个 **本地优先（local-first）** 的桌面 AI 工作应用，基于 **Tauri + React + TypeScript**，模型能力由 **OpenRouter** 提供。
+Jessie 是一个 **本地优先（local-first）** 的桌面 AI 聊天客户端，基于 **Tauri + React + TypeScript**。  
+它的目标很明确：让 AI 对话在真实日常工作中更可靠、更高效。
 
-它面向高频日常使用：流式对话、稳定记忆、真实工具调用、低噪音交互。
+核心原则：
 
-## 为什么做 Jessie
+1. 高信号、低噪音
+2. 极简但高效的交互
+3. 工具能力真实可执行（不是提示词“假功能”）
+4. 可靠性边界清晰可见
 
-很多 AI 聊天产品在真实工作流里会暴露几个核心问题：
+## 为什么要做 Jessie
 
-1. 无状态：每次对话都像第一次认识你。
-2. 不透明：工具失败只给模糊报错，定位困难。
-3. 云依赖重：默认把数据交给远端。
-4. 噪音高：设置很多，但有效信息很少。
+很多 AI 聊天产品“演示很好看，日用不顺手”，典型问题是：
 
-Jessie 的目标是用更务实的本地架构，把这些问题逐个解决。
+1. 缺少长期上下文，聊几轮就“失忆”。
+2. 失败信息模糊，排错成本高。
+3. 设置项很多，但有效能力不成体系。
+4. 模型选择僵化，容易被单一厂商绑定。
 
-## 产品优势
+Jessie 用务实的本地架构，专门解决这些高频痛点。
 
-1. 本地优先存储
-   - 聊天、设置、记忆均保存在本地。
-   - 不依赖远程日志系统。
-2. 工具是真调用，不是“提示词假联网”
-   - Tavily 联网搜索是真 API 调用。
-   - MCP 工具是真实连接 server 执行。
-3. 可靠性优先的对话主链路
-   - 统一错误分类。
-   - 用户可读、可操作的报错。
-   - 非关键子系统失败不会拖垮主回复。
-4. 高信噪比 UI
-   - 设置结构克制、可理解。
-   - 默认行为适配高频使用。
+## Jessie vs 普通聊天客户端
 
-## 能力对比矩阵：Jessie vs 普通聊天
-
-| 能力项 | Jessie | 普通聊天 |
+| 能力项 | Jessie | 普通聊天客户端 |
 | --- | --- | --- |
-| 多模型接入 | 通过 OpenRouter 统一接入多模型生态 | 通常绑定单一厂商或少量固定模型 |
-| 任务级模型选择 | 可按任务选择速度/成本/推理能力不同的模型 | 多数场景用同一模型策略 |
-| 实时联网检索 | Tavily 作为真实工具调用执行 | 常见为提示词层“可联网”声明，缺乏可验证执行 |
-| 外部工具扩展 | 作为 MCP Host 支持本地与远程 MCP server | 集成能力通常受限于内置工具 |
-| 记忆质量控制 | 严格提取门控 + 去重 + 可覆盖更新 | 容易积累噪声对话片段 |
-| 可诊断性 | Typed error + 明确用户提示 | 常见模糊报错（空返回/未知错误） |
-| 故障隔离 | 工具/记忆/标题失败不拖垮主对话 | 子系统异常可能影响整条链路 |
-| 隐私边界 | 默认本地优先存储 | 常见云优先 |
-| 可维护性 | 聊天/工具/记忆/运行时边界清晰 | 功能耦合更高，演进成本更大 |
+| 模型生态 | 基于 OpenRouter 统一接入多模型 | 常见为单一厂商或少量固定模型 |
+| 任务级模型路由 | 可按“起草/推理/定稿”阶段选不同模型 | 往往一套模型策略覆盖所有场景 |
+| 联网检索真实性 | Tavily 真实工具调用 | 常见是提示词层“可联网”，不可验证 |
+| 外部工具扩展 | MCP Host（stdio + 远程 HTTP，含回退） | 集成能力通常较固定 |
+| 记忆质量 | 严格提取门控 + 去重 + 可覆盖更新 | 容易沉淀噪音对话片段 |
+| 可靠性可观测 | Typed error + 明确用户提示 | 常见“无内容返回/未知错误” |
+| 故障隔离 | 工具/记忆/标题失败不拖垮主回复 | 子系统失败可能连带影响全链路 |
+| 隐私姿态 | 默认本地优先持久化 | 常见云优先 |
+| 产品复杂度 | 极简 UI、关键控制集中 | 功能堆叠但认知负担更高 |
 
-## OpenRouter 带来的能力
+## OpenRouter 带来的核心能力
 
-在 Jessie 里，OpenRouter 不是“多一个模型下拉框”，而是能力层面的放大器：
+Jessie 不是“顺便支持 OpenRouter”，而是 **以 OpenRouter 为能力底座**。
 
-1. 单入口接入多模型生态
-   - 保持同一套聊天主链路，同时按需切换不同模型与提供方。
-2. 同一工作流内做任务级选型
-   - 起草阶段可选低延迟模型，关键推理阶段切到更强模型。
+1. 单次集成，覆盖多模型生态
+   - 不改工作流即可切换模型家族与提供方。
+2. 按任务选择模型
+   - 起草用更快更省的模型，关键推理切到更强模型。
 3. 质量/速度/成本可实际权衡
-   - 按任务显式做取舍，而不是被迫用一个默认模型覆盖所有场景。
+   - 不再被一个全局默认模型绑定全部任务。
 4. 降低厂商锁定风险
-   - 你的模型组合变化时，Jessie 的工作流仍可稳定延续。
-5. 与工具链和记忆链路协同
-   - 同一模型层可以无缝配合 Tavily、MCP 与记忆注入，无需重构流程。
+   - 模型偏好变化时，产品使用路径保持稳定。
+5. 与工具和记忆链路协同
+   - 模型调用、工具调用、记忆注入在同一主链路闭环。
+
+## 产品核心优势
+
+1. 极简且高辨识度的 UI 交互
+   - 页面干净，减少无效信息和操作干扰。
+2. 快速流畅的对话反馈
+   - 流式输出 + 桌面端响应体验。
+3. 本地优先数据模型
+   - 聊天、设置、记忆都在本地持久化。
+4. 可靠性优先
+   - 非关键子系统异常不会拖垮主对话。
+5. 能力边界诚实
+   - 不伪造联网结果，不掩盖工具失败。
+
+## 截图
+
+主界面预览：
+
+![Jessie 主界面](./ui.png)
+
+## 以桌面 App 形式运行（生产环境）
+
+你不需要每次都在开发环境启动 Jessie。打一次生产包后，就可以像普通 macOS 应用一样直接打开。
+
+1. 构建安装包
+
+```bash
+npm install
+npm run tauri:build
+```
+
+2. 构建产物位置（macOS）
+   - DMG：`src-tauri/target/release/bundle/dmg/`
+   - APP 包：`src-tauri/target/release/bundle/macos/`
+3. 安装
+   - 打开生成的 `.dmg`，把 `Jessie.app` 拖到 `Applications`。
+4. 后续可直接从 `Applications` 或 Spotlight 启动，无需终端。
+5. 如果首次打开被 macOS 拦截
+   - 进入 `系统设置 > 隐私与安全性`，对 Jessie 选择 `仍要打开`。
+
+API Key 保存说明：
+
+1. OpenRouter/Tavily Key 和设置会由应用在本地持久化。
+2. 打包后正常使用时，不需要每次重输 Key。
+3. 数据默认保留在本机，除非你主动导出或分享。
 
 ## 真实工作流场景
 
 1. 研究场景
-   - 提问后，模型触发 `web_search`，Jessie 调用 Tavily 并把结果回注给模型。
-   - 若工具失败，会给出可操作报错，不会伪装成“已联网”。
-2. 开发场景
-   - 用快模型完成草稿，再用强推理模型做审阅与收敛。
-   - 长期偏好（表达风格、约束）可跨会话复用。
-   - 即使记忆或标题子流程异常，也不会阻断主回复。
-3. 可视化协作场景
-   - 连接 MCP Apps server（例如 Excalidraw MCP）。
-   - 工具执行后可在聊天中渲染 server 提供的 app 资源。
-   - 资源不可用时优雅降级为文本，不中断对话。
+   - 询问时效性问题。
+   - 模型触发 `web_search`，Jessie 调用 Tavily 并将结果回注模型。
+   - 若搜索失败，给出清晰报错，而不是“假装已联网”。
+2. 工程场景
+   - 用快模型起草，再切到强推理模型做审阅与收敛。
+   - 长期偏好通过记忆保留并跨会话复用。
+3. MCP Apps 场景
+   - 连接 MCP server（例如 Excalidraw MCP）。
+   - 通过 Jessie 的工具调用链路执行外部工具。
+   - 若 server 提供 app 资源，可在聊天中内嵌展示。
 
-## Non-Goals / 边界声明
+## 记忆系统（质量优先）
 
-Jessie 明确不做这些“伪能力”：
+Jessie 的记忆策略是“宁缺毋滥”：宁可少记，也不存垃圾。
 
-1. 不伪造联网搜索结果。
-2. 不隐藏工具失败并假装成功。
-3. 不用大量无效开关堆砌 UI。
-4. 不对未实现能力做超前承诺。
+1. 允许入库的长期信息
+   - 用户偏好
+   - 身份事实
+   - 长期项目上下文
+   - 长期指令
+2. 明确拒绝的内容
+   - 一次性任务
+   - 临时计划
+   - 泛化问答片段
+   - 助手口吻输出文本
+3. 质量控制机制
+   - 入库前显式语义门控
+   - 近重复检测与合并
+   - 新事实可覆盖旧偏好/旧版本
+4. Token 效率机制
+   - 记忆链路统一英文表示
+   - 中文输入会先转英文用于检索/注入
+   - 超长记忆由 LLM 精简并缓存
 
-## 记忆系统（v2+）逻辑
-
-Jessie 的记忆策略是“宁缺毋滥”：
-
-1. 召回
-   - 按置顶、时效、关键词重合、权重综合排序。
-   - 注入前去重。
-2. 提取
-   - 对话后自动提取候选记忆，并经过严格语义筛选。
-   - 仅接受长期有效信息：偏好 / 身份事实 / 项目上下文 / 长期指令。
-   - 拒绝临时任务、一次性请求、泛化问答、助手口吻文本。
-3. 冲突与去重
-   - 近似记忆合并。
-   - 新的强事实可覆盖旧弱版本。
-4. 英文统一与省 token
-   - 记忆上下文统一为英文。
-   - 用户输入中文时，会先转换为英文再进入记忆检索/注入链路。
-   - 超长记忆会先由 LLM 精简为英文短版并缓存，降低 token 成本。
-
-## 工具能力：联网搜索 + MCP
+## 工具能力
 
 ### Tavily 联网搜索
 
-1. 模型触发 `web_search` 工具调用。
-2. Jessie 调用 Tavily API。
-3. 结果以 tool message 回传模型。
+1. 模型触发 `web_search`。
+2. Jessie 调用 Tavily Search API。
+3. 结果以 tool message 回传。
 4. 模型继续生成最终回答。
 
-若 Tavily 不可用，Jessie 会明确降级，不会伪造联网结果。
+若 Tavily 不可用，Jessie 会明确失败并保持诚实边界，不伪造联网内容。
 
-### MCP（v1 主机基础）
+### MCP（Host v1）
 
 已支持：
 
-1. 本地 `stdio` MCP server。
-2. 远程 HTTP MCP server（优先 Streamable HTTP，自动回退 legacy SSE）。
-3. 工具发现、命名规避冲突、执行回传。
-4. MCP Apps 在聊天气泡内嵌展示（server 提供 UI 资源时）。
+1. 本地 stdio MCP server
+2. 远程 HTTP MCP server（优先 Streamable HTTP，自动回退 legacy SSE）
+3. 工具发现、命名规避、执行回传
+4. 有 app 资源时在聊天中渲染 MCP App 视图
 
-远程 MCP 安全策略：
+远程 MCP 安全基线：
 
-1. 仅允许 HTTPS。
-2. 域名白名单校验。
-3. 支持每个 server 独立 Header。
+1. 仅 HTTPS
+2. 域名白名单
+3. 每个 server 可配置独立 Header
+
+## Non-Goals / 边界声明
+
+Jessie 明确不做：
+
+1. 假工具能力或伪联网结果
+2. 过度复杂的“控制台式”设置页面
+3. 静默吞错与失败掩盖
+4. 脱离实际需求的过度工程化
 
 ## 技术栈
 
@@ -326,6 +449,7 @@ Jessie 的记忆策略是“宁缺毋滥”：
 4. TailwindCSS
 5. OpenRouter Chat Completions API
 6. Tavily Search API
+7. MCP Host Runtime（前端 + Rust 后端）
 
 ## 快速开始
 
@@ -338,6 +462,7 @@ npm run tauri:dev
 
 ```bash
 npm run build
+npm run test
 npm run tauri:build
 ```
 
@@ -350,12 +475,12 @@ npm run tauri:build
 
 ## 关键模块
 
-1. `src/store/useChatStore.ts`：对话主链路、流式输出、工具循环、可靠性控制
+1. `src/store/useChatStore.ts`：对话主链路、流式输出、工具循环、可靠性边界
 2. `src/store/useMemoryStore.ts`：记忆导入/提取/召回/注入/压缩
-3. `src/lib/memoryQuality.ts`：记忆筛选与语义门控
+3. `src/lib/memoryQuality.ts`：记忆质量门控
 4. `src/lib/openrouter.ts`：OpenRouter 请求层
-5. `src/lib/mcpHost.ts` + `src-tauri/src/mcp.rs`：MCP 运行时与调度
-6. `src/components/settings/*`：设置页面
+5. `src/lib/mcpHost.ts` + `src-tauri/src/mcp.rs`：MCP 运行时/发现/执行
+6. `src/components/settings/*`：设置交互层
 
 ## 安全说明
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTr } from "../lib/i18n";
 import { useSettingsStore, type SettingsTab } from "../store/useSettingsStore";
 import { useToastStore } from "../store/useToastStore";
@@ -18,6 +18,9 @@ function SettingsPanel() {
   const setActiveTab = useSettingsStore((state) => state.setSettingsTab);
   const closeSettings = useSettingsStore((state) => state.closeSettings);
   const pushToast = useToastStore((state) => state.pushToast);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const saveDebounceRef = useRef<number | null>(null);
+  const saveHideRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isSettingsOpen) {
@@ -45,8 +48,34 @@ function SettingsPanel() {
     [isSettingsOpen]
   );
 
-  const showSavedToast = () => {
-    pushToast(t("Saved successfully", "保存成功"), "success");
+  useEffect(
+    () => () => {
+      if (saveDebounceRef.current) {
+        window.clearTimeout(saveDebounceRef.current);
+      }
+      if (saveHideRef.current) {
+        window.clearTimeout(saveHideRef.current);
+      }
+    },
+    []
+  );
+
+  const showSavedIndicator = () => {
+    setSaveStatus("saving");
+
+    if (saveDebounceRef.current) {
+      window.clearTimeout(saveDebounceRef.current);
+    }
+    if (saveHideRef.current) {
+      window.clearTimeout(saveHideRef.current);
+    }
+
+    saveDebounceRef.current = window.setTimeout(() => {
+      setSaveStatus("saved");
+      saveHideRef.current = window.setTimeout(() => {
+        setSaveStatus("idle");
+      }, 1400);
+    }, 700);
   };
 
   const showMessage = (message: string, isError = false) => {
@@ -54,7 +83,7 @@ function SettingsPanel() {
   };
 
   const sectionProps = {
-    onSaved: showSavedToast,
+    onSaved: showSavedIndicator,
     onMessage: showMessage,
   };
 
@@ -100,9 +129,16 @@ function SettingsPanel() {
 
           <div className="relative min-w-0 flex-1">
             <div className="flex h-14 items-center justify-between border-b border-[color:var(--border)] px-5">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">
-                {t("Jessie Settings", "Jessie 设置")}
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">
+                  {t("Jessie Settings", "Jessie 设置")}
+                </p>
+                {saveStatus !== "idle" && (
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    {saveStatus === "saving" ? t("Saving...", "正在保存...") : t("Saved", "已保存")}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={closeSettings}
